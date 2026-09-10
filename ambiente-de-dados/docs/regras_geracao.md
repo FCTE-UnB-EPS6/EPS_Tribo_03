@@ -124,9 +124,12 @@ com um agregador só.
 ## Limitações conhecidas
 
 - Retificação bitemporal não é simulada (um snapshot por participante).
-- `referencia_externa` tem só o esqueleto das 4 fontes do §1; `versao_tabua`,
-  `data_consulta` e `resultado_benchmark` ficam nulos até alguém de fato baixar
-  a tábua e rodar o benchmark.
+- `referencia_externa` já está populada para as 4 fontes do §1 (`versao_tabua`,
+  `data_consulta` e `resultado_benchmark` preenchidos pelos scripts
+  `benchmark_*.py` — ver Passo 3 no `DATASET_CARD.md`). Atenção: como
+  `R__referencia_externa.sql` é uma migration repeatable que faz
+  `DELETE`+`INSERT` com tudo `NULL`, reaplicá-la depois de editar o arquivo
+  apaga esses resultados — rodar os `benchmark_*.py` de novo nesse caso.
 - Tábua biométrica (qx/lx/dx com intervalos de confiança, §2) está fora desta
   rodada.
 - O precision/recall dá 1.00 em todos os tipos porque a base sintética é limpa

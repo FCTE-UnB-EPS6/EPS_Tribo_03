@@ -14,6 +14,13 @@
 -- ATENÇÃO: esta tabela nunca é fonte de linhas do dataset de entrada
 -- (§4, último bullet) — serve só para registrar a comparação
 -- metodológica.
+--
+-- ATENÇÃO 2: depois que os scripts scripts/benchmark_*.py rodarem e
+-- preencherem versao_tabua/data_consulta/resultado_benchmark, NÃO editar
+-- este arquivo sem necessidade — por ser repeatable, o Flyway reexecuta o
+-- DELETE+INSERT abaixo (tudo NULL de novo) sempre que o checksum mudar,
+-- apagando os resultados do Passo 3. Se precisar editar, rodar os
+-- benchmark_*.py de novo em seguida.
 
 DELETE FROM referencia_externa;
 

@@ -113,10 +113,11 @@ def main():
 
     cur.execute("""
         UPDATE referencia_externa
-           SET resultado_benchmark = %s,
+           SET versao_tabua = %s,
+               resultado_benchmark = %s,
                data_consulta = COALESCE(data_consulta, %s)
          WHERE fonte = 'IBGE'
-    """, (resumo, date.today()))
+    """, ("Tábua Completa de Mortalidade 2024 (Ambos os Sexos)", resumo, date.today()))
     conn.commit()
     cur.close()
     conn.close()
