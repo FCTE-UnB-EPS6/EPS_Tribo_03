@@ -139,8 +139,7 @@ def montar_relatorio(linhas, gate_aderencia_resultado, gate_ae_resultado):
     aderencia_ok, texto_aderencia = gate_aderencia_resultado
     ae_ok, texto_ae = gate_ae_resultado
 
-    gates_ok = [g for g in (aderencia_ok, ae_ok) if g is not None]
-    pronta = bool(gates_ok) and all(gates_ok)
+    pronta = aderencia_ok is True and ae_ok is True
 
     texto = [
         "# Tábua Biométrica Própria — consolidação final",

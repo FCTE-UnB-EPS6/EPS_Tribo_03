@@ -21,7 +21,8 @@ entrada e resultado. Uma linha nova por execução completa do pipeline
 
 | Data | Seed/versão do dataset (Passo 1) | Volume (N_PARTICIPANTES) | Razão A/E geral (Ambos) | Resultado teste de aderência | Resultado validação temporal | Veredito `tabua_propria.py` | Observações |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| _(preencher na primeira execução real)_ | | | | | | | Parâmetros acima ainda não testados contra dados reais — scripts só validados com dados sintéticos em memória e, no caso do `comparacao_ae.py`, com os arquivos reais do IBGE (ver notas de implementação abaixo), sem Postgres disponível na máquina de desenvolvimento. |
+| 2026-09-11 | seed=42 | 301 | 0.6879 | Não calculável — 1 célula após pooling, gl=0 | Não calculável — 1 célula no holdout, gl=0 | PRONTA PARA OFICIALIZAR | Pipeline completo executado com sucesso (9/9). A/E geral dentro da faixa 0.5–2.0. Teste de aderência e validação temporal inconclusivos por exposição insuficiente. A/E M=0.3326 e F=1.5678. |
+| 2026-09-11 | seed=42 | 301 | 0.6879 | Não calculável — 1 célula após pooling, gl=0 | Não calculável — 1 célula no holdout, gl=0 | REVISAR ANTES DE OFICIALIZAR | Pipeline 9/9 executado sem erro após correção do gate final. Aderência e validação temporal inconclusivas por dados insuficientes. A/E geral dentro da faixa. |
 
 ## Notas de implementação (contexto de quando cada etapa foi escrita)
 
