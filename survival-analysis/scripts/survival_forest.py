@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored, integrated_brier_score
+from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split
 
 
@@ -95,9 +96,10 @@ def calcular_metricas(rsf, X_train, X_test, y_train, y_test):
     }
 
 
-def importancia_variaveis(rsf, covariaveis, saida_dir):
-    """Plota importância das variáveis (permutation importance)."""
-    importancias = rsf.feature_importances_
+def importancia_variaveis(rsf, covariaveis, X_test, y_test, saida_dir):
+    """Plota importância das variáveis via permutation importance."""
+    result = permutation_importance(rsf, X_test, y_test, n_repeats=15, random_state=42)
+    importancias = result.importances_mean
     ordem = np.argsort(importancias)[::-1]
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -106,7 +108,7 @@ def importancia_variaveis(rsf, covariaveis, saida_dir):
     ax.barh(range(len(nomes)), valores[::-1])
     ax.set_yticks(range(len(nomes)))
     ax.set_yticklabels(nomes[::-1])
-    ax.set_xlabel("Importância")
+    ax.set_xlabel("Importância (permutation)")
     ax.set_title("Random Survival Forest — Importância das Variáveis")
     ax.grid(True, alpha=0.3, axis="x")
     fig.tight_layout()
@@ -177,7 +179,7 @@ def main():
         print(f"\n✅ Diferença treino-teste aceitável: {overfit:.4f}")
 
     print("\nImportância das variáveis:")
-    imp = importancia_variaveis(rsf, covariaveis, saida_dir)
+    imp = importancia_variaveis(rsf, covariaveis, X_test, y_test, saida_dir)
     for nome, valor in imp:
         print(f"  {nome}: {valor:.4f}")
 
