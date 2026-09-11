@@ -21,7 +21,7 @@ Verde: pode começar agora, em paralelo. Âmbar: entra na fila só depois que a 
 
 ### O que já foi feito
 
-Construção da infraestrutura de dados sintéticos e do pipeline de qualidade que serve de base para todas as demais duplas da Tribo 3.
+Construção da infraestrutura de dados sintéticos e do pipeline de qualidade que serve de base para todas as demais duplas da Tribo 3. Conferido item a item contra o código.
 
 - ✅ Schema bitemporal em Postgres com as 7 entidades do desenho de referência (participante, evento, exposicao, contribuicao_beneficio, referencia_externa, dicionario_dados, data_quality_score), mais o schema gabarito.registro_erro_injetado.
 - ✅ Gerador de massa sintética reprodutível (seed fixa, UUIDs derivados do rng, Faker) — mesma seed produz sempre o mesmo dataset.
@@ -34,10 +34,9 @@ Construção da infraestrutura de dados sintéticos e do pipeline de qualidade q
 ### O que ficou pendente
 
 - ⚠️ Gerar o dicionário de dados como documento PDF formal — hoje só existe como tabela no banco. Exportar (SELECT * ORDER BY tabela, nome_campo), formatar com capa, versão e data de emissão, e organizar por entidade. É o artefato mínimo de interface exigido pelo escopo.
-- ⚠️ dicionario_dados.responsavel está genérico ("Tribo 3") nos 69 campos — atribuir o nome da dupla responsável por cada tabela antes de fechar o PDF.
-- ⚠️ O mapeamento do erro unidade_trocada aponta para a dimensão materialidade, mas o desenho de referência pede consistência — ajustar o mapeamento ou registrar em comentário por que a decisão foi diferente (como já foi feito para o erro orfao).
-- ⚠️ Conferir se o DATASET_CARD.md já declara as distribuições, dependências, eventos raros e inconsistências intencionais do gerador — é uma exigência explícita da governança de dados sintéticos.
-- ⚠️ Registrar formalmente o tratamento LGPD (minimização e anonimização) do dataset antes da entrega — exigência explícita do Definition of Done (§8), mesmo sendo dado sintético.
+- ⚠️ dicionario_dados.responsavel está genérico ("Tribo 3") nos 69 campos — confirmado nos 69 registros. Atribuir o nome da dupla responsável por cada tabela antes de fechar o PDF.
+- ⚠️ O mapeamento do erro unidade_trocada aponta para a dimensão materialidade, mas o desenho de referência pede consistência — confirmado, sem ajuste nem comentário de justificativa até agora. Ajustar o mapeamento ou registrar em comentário por que a decisão foi diferente (como já foi feito para o erro orfao).
+- ⚠️ Registrar formalmente o tratamento LGPD (minimização e anonimização) do dataset antes da entrega — exigência explícita do Definition of Done (§8). Confirmado: não há nenhuma menção a isso em nenhum arquivo do projeto ainda.
 
 ---
 
@@ -50,17 +49,34 @@ Construção da infraestrutura de dados sintéticos e do pipeline de qualidade q
 
 ✅ Depende só do Passo 1 (participante, evento e exposicao estáveis) — como o núcleo do Passo 1 já está pronto (só faltam as pendências administrativas), esta dupla pode começar agora, em paralelo a todos os outros passos.
 
+### O que já foi feito
+
+Implementação completa do pipeline de survival analysis em `survival-analysis/`.
+
+- ✅ Dataset analítico de sobrevivência construído a partir de participante, evento e exposição (`construir_dataset.py`), com tempo observado, indicador de evento (óbito), censura e covariáveis (idade_ingresso, sexo, plano_tipo, submassa).
+- ✅ Baseline Kaplan-Meier com curvas de sobrevivência por subgrupo (sexo, plano), log-rank test e gráficos (`kaplan_meier.py`).
+- ✅ Baseline Cox Proportional Hazards com verificação de multicolinearidade (Pearson/Spearman), teste de riscos proporcionais (Schoenfeld), C-index e hazard ratios (`cox_ph.py`).
+- ✅ Challenger Random Survival Forest (scikit-survival) com importância de variáveis, curvas individuais, C-index treino/teste e Integrated Brier Score (`survival_forest.py`).
+- ✅ Comparação champion-challenger por validação temporal (5 folds), com critério objetivo de adoção: ganho de C-index > 0.02 (`comparar_modelos.py`).
+- ✅ Model card documentando propósito, população, dados, métodos, métricas, limitações e restrição ética.
+- ✅ Experiment record com estrutura para registro de cada rodada experimental (métricas a preencher após execução).
+- ✅ Suporte a dois modos: dados do Postgres do Passo 1 (`--fonte banco`) ou geração sintética local (`--fonte local`), permitindo desenvolvimento sem Docker.
+
+### O que ficou pendente
+
+- ⚠️ Rodar o pipeline completo contra o banco Postgres do Passo 1 para obter métricas reais (hoje só a estrutura e o código estão prontos; as métricas no experiment_record estão marcadas como "preencher após execução").
+- ⚠️ Extensão para competing risks (invalidez, aposentadoria, desligamento como eventos separados, não censura) — evolução futura documentada no model card.
+
 ### O que fazer
 
-Construir e validar um modelo individual de sobrevivência a partir da massa sintética disponível, começando por um baseline interpretável e comparando posteriormente com um modelo challenger mais complexo.
+Não depende da tábua própria nem da tábua geracional — só precisa da base participante/evento/exposicao, que já está de pé.
 
-- Definir o problema de sobrevivência do MVP: população analisada, evento de interesse, período de observação e regras de censura.
-- Construir e versionar o dataset analítico de survival a partir de participante, evento e exposição, contendo tempo observado, ocorrência do evento, censura e covariáveis utilizadas pelo modelo. Essas entidades já estão previstas no desenho do banco de referência.
-- Construir um baseline interpretável com Kaplan-Meier e/ou Cox, utilizando covariáveis disponíveis e justificadas.
-- Treinar pelo menos um modelo challenger de sobrevivência, como Survival Forest, para comparação com o baseline.
-- Avaliar e comparar os modelos por validação temporal, calibração e discriminação, adotando o modelo mais complexo apenas se houver ganho mensurável frente ao baseline.
-- Registrar os experimentos de forma reproduzível, incluindo versão dos dados, covariáveis, métodos, parâmetros, métricas e resultados.
-- Documentar o contrato de saída do modelo, incluindo estimativas, versão, métricas, incerteza e limitações.
+- Baseline interpretável primeiro: Kaplan-Meier e/ou Cox, usando idade, sexo, plano_tipo e submassa como covariáveis.
+- Modelos mais complexos (survival forest, gradient boosting survival, abordagens bayesianas) só entram se houver ganho comprovado de calibração e discriminação frente ao baseline.
+- Validação temporal e por subgrupo, com calibração e discriminação documentadas — exigência do Definition of Done.
+- Testar correlação/dependência entre covariáveis (Pearson/Spearman e, quando justificado, cópulas) antes de incluir no modelo, para evitar multicolinearidade — exigência do §3/§4.2 do escopo.
+- Registrar o experiment record do treinamento (dados usados, hiperparâmetros, métricas, versão), além do model card — os dois documentos são exigidos separadamente pelo escopo (§3/§4.4).
+- Deixar registrado no model card que a estimativa individual é insumo analítico para gestão de risco coletivo, nunca decisão automática sobre direitos individuais — restrição explícita do escopo.
 
 ---
 
@@ -73,15 +89,17 @@ Construir e validar um modelo individual de sobrevivência a partir da massa sin
 
 ✅ Nenhuma dependência formal — mas é a mesma dupla do Passo 1, então na prática entra depois que as pendências administrativas de lá forem fechadas.
 
-### O que fazer
+### O que já foi feito
 
-Popular a referencia_externa, hoje com os registros criados mas versao_tabua, data_consulta e resultado_benchmark todos nulos. Sem isso, o Passo 5 não consegue calcular A/E.
+Passo mais avançado do que a versão anterior deste roteiro sugeria — conferido direto no código, não só na descrição da tarefa.
 
-- Baixar a Tábua Completa de Mortalidade mais recente do IBGE (fonte pública, sem necessidade de convênio).
-- Versionar a tábua bruta baixada no repositório (ex.: pasta docs/referencias/), preservando o arquivo original para rastreabilidade.
-- Atualizar a linha fonte = 'IBGE' com versao_tabua (ano/edição) e data_consulta (data do download).
-- Rodar uma comparação preliminar de plausibilidade (ordem de grandeza do qx sintético vs. IBGE por faixa etária) e registrar o resumo em resultado_benchmark.
-- Repetir depois para HMD, BR-EMS e SOA, nessa ordem de prioridade — IBGE primeiro por ser o mais simples de obter e o baseline demográfico mais direto.
+- ✅ Scripts de benchmark implementados para as 4 fontes: benchmark_ibge.py, benchmark_hmd.py, benchmark_brems.py e benchmark_soa.py.
+- ✅ Arquivos brutos das 4 fontes já baixados e versionados em docs/referencias/.
+- ✅ Bug identificado e corrigido: benchmark_ibge.py fazia o UPDATE em referencia_externa sem gravar versao_tabua (diferente dos outros 3 scripts, que gravam certinho) — mesmo rodando o benchmark do IBGE, a linha ficava sem o dado que o Passo 5 precisa para a comparação A/E. Já corrigido no código, com nota atualizada em regras_geracao.md e aviso adicionado na migration R__referencia_externa.sql para não perder os dados de novo no futuro.
+
+### O que ficou pendente
+
+- ⚠️ Rodar benchmark_ibge.py novamente contra o Postgres para a correção valer no banco — ainda não rodou porque não há Docker instalado nesta máquina.
 
 ---
 
@@ -112,21 +130,25 @@ Bloco relativamente independente dos demais — pode começar assim que houver c
 
 ### Depende de outros passos
 
-⚠️ Depende do Passo 3 só para a etapa de comparação A/E (precisa do qx do IBGE em referencia_externa). As demais etapas — taxas brutas, suavização, credibility interno, IC, validação temporal — não dependem de nada e podem começar agora.
+⚠️ Depende do Passo 3 só para a etapa de comparação A/E (precisa do qx do IBGE em referencia_externa). O Passo 3 já está quase concluído — falta só rodar o script novamente após a correção do bug. As demais etapas — taxas brutas, suavização, credibility interno, IC, validação temporal — não dependem de nada e podem começar agora.
 
-### O que fazer
+### O que já foi feito
 
-Seguir o fluxo do escopo oficial: dados sintéticos → exposição ao risco → eventos observados → taxas brutas → comparação A/E → suavização → credibility → comparação com tábua externa → validação → tábua própria.
+As 9 etapas do fluxo da tábua própria já estão implementadas como scripts individuais, orquestradas por um pipeline único. A ambiguidade metodológica do credibility também já foi resolvida.
 
-- Taxas brutas de qx: agregar exposicao por idade exata e submassa, calcular mortes observadas sobre exposição — pode começar sem esperar o Passo 3.
-- Construir e versionar as coortes e a contagem de eventos por submassa como artefato próprio, não só como insumo intermediário do qx — exigência explícita do §4.2 do escopo.
-- Comparação A/E: comparar o qx bruto sintético contra o qx do IBGE registrado pelo Passo 3 — depende dele estar concluído.
-- Suavização: método baseline simples primeiro (ex.: Whittaker-Henderson ou média móvel), só evoluindo se houver ganho demonstrável.
-- Teste de aderência (KS, Anderson-Darling ou Qui-quadrado) para validar se a curva suavizada do qx se ajusta plausivelmente aos dados observados — exigência do §3/§8 (DoD).
-- Credibility: blend entre taxa observada e baseline externo para submassas com exposição baixa.
-- Intervalos de confiança: bootstrap ou IC binomial/Poisson por célula de qx.
-- Validação temporal: holdout por ano_calendario (campo já existe em exposicao).
-- Data card, model card e experiment record da tábua: propósito, população, dados, método, versão, métricas, limitações — os três documentos são exigidos separadamente pelo escopo.
+- ✅ As 9 etapas do fluxo — taxas brutas de qx, coortes e contagem de eventos por submassa, comparação A/E, suavização, teste de aderência, credibility, intervalos de confiança e validação temporal — implementadas como scripts individuais (ex.: taxas_brutas_qx.py, suavizacao.py).
+- ✅ pipeline.py criado, orquestrando as 9 etapas em sequência e parando no primeiro erro (ex.: não roda suavizacao.py se taxas_brutas_qx.py falhou) — não precisa mais rodar cada etapa manualmente; os comandos individuais ficam documentados no README só como opção para repetir uma etapa isolada.
+- ✅ Ambiguidade do credibility (baseline interno vs. externo) resolvida: usa o baseline interno da própria massa sintética, e a comparação com o IBGE é uma etapa de validação separada e posterior — consistente com a ordem do fluxo do §3/§4.3 do escopo (credibility e "comparação com tábua externa" aparecem como etapas distintas).
+- ✅ Estrutura do experiment_record.md pronta, incluindo a nova coluna "Veredito tabua_propria.py" — hoje só falta preencher com números reais.
+
+### O que ficou pendente
+
+Único item pendente: rodar e testar tudo de ponta a ponta. Nenhuma decisão de método ou código em aberto — é só execução e leitura de resultado.
+
+- ⚠️ Subir o Postgres (docker compose up -d dentro de ambiente-de-dados/), aplicar as migrations e popular a massa sintética — hoje bloqueado só pela falta de Docker nesta máquina.
+- ⚠️ Rodar python scripts/pipeline.py — um comando único que executa as 9 etapas em sequência e para no primeiro erro.
+- ⚠️ Ler o veredito do tabua_propria.py: "PRONTA PARA OFICIALIZAR" ou "REVISAR", conforme os dois portões (aderência e A/E). P-valor baixo no teste de aderência → ajustar a JANELA=2 da suavização. Razão A/E fora de 0.5x–2x → revisar antes de considerar a tábua definitiva.
+- ⚠️ Preencher o experiment_record.md com os números reais dessa primeira rodada (hoje vazio, só com a estrutura pronta).
 
 ---
 

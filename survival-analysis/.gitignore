@@ -1,0 +1,4 @@
+data/*.csv
+data/graficos/
+__pycache__/
+*.pyc
