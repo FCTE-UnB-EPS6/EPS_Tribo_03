@@ -13,7 +13,6 @@ Uso:
 import argparse
 import os
 import sys
-import warnings
 
 import matplotlib
 matplotlib.use("Agg")
@@ -21,7 +20,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from lifelines import CoxPHFitter
 from lifelines.statistics import proportional_hazard_test
-import numpy as np
 
 
 def carregar_dataset(caminho):
@@ -63,15 +61,13 @@ def verificar_multicolinearidade(df, covariaveis):
     return corr_pearson, pares_altos
 
 
-def selecionar_covariaveis(df, pares_altos):
-    """Remove covariáveis redundantes se houver multicolinearidade.
+def selecionar_covariaveis():
+    """Lista fixa por domínio; CV e Plano C são referências.
 
-    Para one-hot encoding do mesmo fator, remove uma categoria (a referência
-    é implícita). Plano tem 3 dummies (BD, CD, CV) — remove CV como referência.
-    Submassa tem 3 (A, B, C) — remove C como referência.
+    Pearson/Spearman são diagnósticos, não seleção automática. Em avaliação,
+    constantes são removidas usando somente o treino (comparar_modelos.py).
     """
-    covariaveis = ["idade_ingresso", "sexo_M", "plano_BD", "plano_CD", "submassa_A", "submassa_B"]
-    return covariaveis
+    return ["idade_ingresso", "sexo_M", "plano_BD", "plano_CD", "submassa_A", "submassa_B"]
 
 
 def ajustar_cox(df, covariaveis):
@@ -80,9 +76,7 @@ def ajustar_cox(df, covariaveis):
     df_cox = df[cols].copy()
 
     cph = CoxPHFitter(penalizer=0.01)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        cph.fit(df_cox, duration_col="tempo_observado", event_col="evento")
+    cph.fit(df_cox, duration_col="tempo_observado", event_col="evento")
 
     return cph
 
@@ -103,7 +97,7 @@ def verificar_proporcionalidade(cph, df, covariaveis):
             print(f"\n⚠️  {len(violacoes)} covariável(is) violam a hipótese PH (p < 0.05)")
             print("   Considerar modelo estratificado ou time-varying para essas variáveis.")
         else:
-            print("\n✅ Nenhuma violação significativa da hipótese PH.")
+            print("\nTeste não detectou evidência de violação; poucos eventos limitam seu poder.")
         return resultado
     except Exception as e:
         print(f"\n⚠️  Teste não executado: {e}")
@@ -119,7 +113,7 @@ def imprimir_resumo(cph, df):
     cph.print_summary(columns=["coef", "exp(coef)", "se(coef)", "p", "lower 0.95", "upper 0.95"])
 
     c_index = cph.concordance_index_
-    print(f"\nConcordance Index (C-index): {c_index:.4f}")
+    print(f"\nConcordance Index APARENTE (treino, não validação): {c_index:.4f}")
     print(f"  (0.5 = aleatório, 1.0 = discriminação perfeita)")
 
     aic = cph.AIC_partial_
@@ -139,7 +133,7 @@ def gerar_graficos(cph, saida_dir):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     cph.plot(ax=ax)
-    ax.set_title("Cox PH — Hazard Ratios (IC 95%)")
+    ax.set_title("Cox PH — Log hazard ratios (IC 95%)")
     ax.axvline(x=0, color="gray", linestyle="--", alpha=0.5)
     fig.tight_layout()
     fig.savefig(os.path.join(saida_dir, "cox_hazard_ratios.png"), dpi=150)
@@ -168,16 +162,16 @@ def main():
 
     base_dir = os.path.dirname(os.path.dirname(__file__))
     dataset_path = args.dataset or os.path.join(base_dir, "data", "dataset_survival.csv")
-    saida_dir = args.saida or os.path.join(base_dir, "data", "graficos")
+    saida_dir = args.saida or os.path.join(os.path.dirname(dataset_path), "graficos")
 
     df = carregar_dataset(dataset_path)
+    print("Ajuste descritivo completo. Para calibração e teste temporal use comparar_modelos.py.")
     print(f"Dataset carregado: {len(df)} registros, {df['evento'].sum()} eventos\n")
 
-    todas_covariaveis = ["idade_ingresso", "sexo_M", "plano_BD", "plano_CD",
-                         "plano_CV", "submassa_A", "submassa_B", "submassa_C"]
+    todas_covariaveis = selecionar_covariaveis()
     corr, pares_altos = verificar_multicolinearidade(df, todas_covariaveis)
 
-    covariaveis = selecionar_covariaveis(df, pares_altos)
+    covariaveis = [c for c in selecionar_covariaveis() if df[c].nunique() > 1]
     print(f"\nCovariáveis selecionadas para o modelo: {covariaveis}")
 
     cph = ajustar_cox(df, covariaveis)
@@ -188,11 +182,11 @@ def main():
     gerar_graficos(cph, saida_dir)
     print(f"\nGráficos salvos em {saida_dir}/")
 
-    metricas_path = os.path.join(base_dir, "data", "metricas_cox.csv")
+    metricas_path = os.path.join(os.path.dirname(dataset_path), "metricas_cox_treino.csv")
     coefs = cph.summary
     metricas = pd.DataFrame([{
         "modelo": "Cox PH",
-        "c_index": cph.concordance_index_,
+        "c_index_treino": cph.concordance_index_,
         "aic_parcial": cph.AIC_partial_,
         "n_covariaveis": len(covariaveis),
         "n_significativas_005": int((coefs["p"] < 0.05).sum()),

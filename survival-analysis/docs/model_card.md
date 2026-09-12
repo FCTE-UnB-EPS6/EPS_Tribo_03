@@ -1,74 +1,118 @@
 # Model Card — Modelo Individual de Sobrevivência
 
-## Propósito
+## Propósito e estado da entrega
 
-Estimar, para cada participante do fundo de pensão, a probabilidade de transição do estado "ativo" para outros estados (óbito, invalidez, aposentadoria, desligamento) ao longo do tempo. As estimativas servem como insumo analítico para gestão de risco coletivo.
+Estimar sobrevivência até óbito desde o ingresso no plano, como insumo analítico
+para risco coletivo. O MVP não estima transições para invalidez, aposentadoria ou
+desligamento. **Nunca usar para decisão automática sobre direitos individuais.**
 
-**A estimativa individual é insumo analítico para gestão de risco coletivo, nunca decisão automática sobre direitos individuais.**
+Implementação revisada; integração e avaliação sobre a rodada oficial do Postgres
+**pendentes**. Cox permanece como baseline por simplicidade, sem superioridade
+preditiva declarada. Os números antigos correspondem a experimentos reproduzidos
+com o gerador local e não validam o modelo na massa oficial.
 
-## População
+## Dados
 
-Participantes sintéticos gerados pelo Passo 1, representando a massa segurada de um fundo de pensão com planos BD, CD e CV.
+População-alvo do experimento: participantes sintéticos das tabelas curadas do
+Passo 1. Extração atual por ID, eventos agregados e exposição agregada para auditoria.
+A identificação de lote/versão é declarada pelo operador; o hash da extração
+identifica seu conteúdo e não comprova, sozinho, qual comando gerou o banco.
 
-## Dados de entrada
+| Campo | Uso |
+|---|---|
+| participante_id, data_ingresso, data_fim, data_referencia | Rastreabilidade e corte; não entram como preditores |
+| tempo_observado, evento | Duração em anos e indicador de óbito dentro da janela |
+| idade_ingresso | Idade calculada na data de ingresso |
+| sexo, plano_tipo, submassa | Categorias preservadas para validação por grupo |
+| sexo_M, plano_BD, plano_CD, submassa_A, submassa_B | Codificação de covariáveis; F, CV e Plano C são referências |
+| exposicao_oficial_anos, diferenca_exposicao_anos | Diagnóstico de coerência, não preditores |
 
-| Campo | Descrição | Tipo |
-|-------|-----------|------|
-| tempo_observado | Tempo entre ingresso e evento/censura (anos) | float |
-| evento | 1 = óbito, 0 = censurado | int |
-| idade_ingresso | Idade em anos na data de ingresso | float |
-| sexo_M | 1 = masculino, 0 = feminino | int |
-| plano_BD | 1 se plano BD | int |
-| plano_CD | 1 se plano CD | int |
-| submassa_A | 1 se Plano A | int |
-| submassa_B | 1 se Plano B | int |
+Datas ausentes/inválidas, ingresso sem acompanhamento, óbito sem data,
+nascimento após ingresso e duração não positiva são excluídos com motivos.
+IDs duplicados interrompem a construção. Não se inventa um óbito na referência
+nem se substitui tempo negativo por 0,01 ano. Óbitos futuros não são eventos na
+janela. Óbito e saída empatados contam como óbito; saída anterior censura.
+Aposentadoria e invalidez não encerram exposição ao risco de morte.
 
-**Referência para one-hot**: plano_CV e submassa_C são as categorias de referência (omitidas para evitar multicolinearidade).
+## Modelos e seleção de covariáveis
 
-## Modelos
+- Cox PH com penalizador ridge 0,01; HR e Schoenfeld no treino.
+- RSF com 100 árvores, `min_samples_split=10`, `min_samples_leaf=5`,
+  `max_features=sqrt`, seed registrada.
+- Lista de covariáveis definida pelo domínio; Pearson/Spearman são diagnósticos
+  documentados, não um seletor automático. Constantes são removidas apenas com
+  base no treino e a mesma lista é aplicada aos dois modelos. Pares com |r|>0,7
+  ficam no registro para inspeção antes da conclusão científica.
 
-### Baseline: Cox Proportional Hazards
+O teste de Schoenfeld pode não detectar violação com poucos eventos; ausência de
+significância não confirma a hipótese PH.
 
-- **Método**: regressão semi-paramétrica de Cox
-- **Regularização**: penalizer=0.01 (ridge)
-- **Hipótese**: riscos proporcionais — testada com resíduos de Schoenfeld
-- **Métrica principal**: Concordance Index (C-index)
+## Validação e métricas
 
-### Challenger: Random Survival Forest
+Um corte de calendário explícito separa ingressos antigos e novos. O treino
+limita desfechos ao corte; o teste usa o acompanhamento até a referência.
+O snapshot cadastral é atual: não há reconstrução completa dos registros segundo
+`data_conhecimento`, nem garantia de que plano/submassa eram iguais no ingresso.
+Essa limitação impede apresentar a avaliação como um backtest prospectivo integral.
 
-- **Método**: ensemble de árvores de sobrevivência (scikit-survival)
-- **Hiperparâmetros**: n_estimators=100, min_samples_split=10, min_samples_leaf=5, max_features=sqrt
-- **Métrica principal**: C-index no conjunto de teste (split 70/30 estratificado)
-- **Critério de adoção**: ganho de C-index > 0.02 sobre o Cox na validação temporal
+| Métrica | Interpretação |
+|---|---|
+| C-index de teste | Discriminação fora do treino; maior risco previsto = maior escore |
+| C-index de treino | Diagnóstico de ajuste/otimismo, não evidência de generalização |
+| Brier no horizonte e IBS | Erro probabilístico com censura (IPCW), combina calibração e discriminação |
+| Erro de calibração global | Absoluto entre média prevista de óbito e 1−KM no horizonte; menor é melhor |
+| Curva de calibração por tercis | Previsto versus observado por KM com IC95%; complemento ao erro global |
+| AIC parcial | Ajuste do Cox, não calibração nem comparação direta com RSF |
+| Log-rank global | Comparação descritiva das curvas KM por fator, não validação do Cox |
 
-## Validação
+Horizonte padrão: 5 anos, substituível antes da rodada. Grade IBS: 30 pontos de
+`max(0,01, menor tempo do teste)` até o horizonte, idêntica nos dois modelos e
+registrada. Fora do suporte de treino/teste ou com pesos IPCW inválidos, Brier/IBS
+ficam indisponíveis com motivo. Tempos de teste além de `tau` são censurados
+administrativamente para a chamada Brier; `tau` é estritamente posterior ao
+horizonte, preservando os desfechos de interesse. C-index usa o teste completo.
 
-- **Validação temporal**: split por ordem cronológica de tempo_observado, 5 folds
-- **Verificação de multicolinearidade**: correlação Pearson e Spearman entre covariáveis antes do ajuste
-- **Teste de riscos proporcionais**: resíduos de Schoenfeld para o Cox
-- **Monitoramento de overfitting**: comparação C-index treino vs. teste para o RSF
+Calibração KM requer pelo menos 20 pessoas, 2 óbitos até o horizonte e 5 pessoas
+acompanhadas até ele; C-index exploratório requer 2 eventos e pares comparáveis.
+São limites operacionais mínimos, não garantias de precisão estatística. Grupos
+sem suporte são registrados, não omitidos da tabela. Os tercis são definidos pelas
+previsões somente para diagnóstico, sem reajustar modelos ou selecionar hiperparâmetros.
 
-## Métricas
+Validação por sexo, BD/CD/CV, Plano A/B/C e idade ao ingresso (até 30, >30 até 45,
+>45): C-index e calibração direta no teste. KM e log-rank descritivos por sexo,
+plano e submassa são entregues separadamente.
 
-| Métrica | Descrição |
-|---------|-----------|
-| C-index | Discriminação: probabilidade de o modelo ordenar corretamente dois indivíduos |
-| AIC parcial | Qualidade de ajuste do Cox (menor = melhor) |
-| Integrated Brier Score | Calibração do RSF ao longo do tempo (menor = melhor) |
-| Log-rank test | Significância da diferença entre curvas KM por subgrupo |
+## Critério de comparação
 
-## Limitações
+Parâmetros definidos antes de analisar a rodada oficial:
 
-- **Dados sintéticos**: o modelo foi treinado e validado com dados gerados, não observados. As distribuições refletem os parâmetros do gerador do Passo 1.
-- **Evento único**: o MVP modela apenas óbito como evento terminal. Invalidez, aposentadoria e desligamento são tratados como censura, não como riscos competitivos — a extensão para competing risks é evolução futura.
-- **Covariáveis limitadas**: apenas idade, sexo, plano e submassa. Variáveis clínicas, socioeconômicas e comportamentais não estão disponíveis no dataset sintético.
-- **Sem atualização dinâmica**: o modelo é estático — não incorpora novos eventos ao longo do tempo sem retreinamento.
+- Ganho de C-index do RSF estritamente maior que 0,02.
+- Redução do erro de calibração global estritamente maior que 0,005 (0,5 ponto percentual).
+- IBS do RSF não superior ao do Cox.
+- Pelo menos 10 eventos no teste e métricas disponíveis para ambos.
+- IC95% percentil dos dois ganhos com limite inferior positivo: bootstrap pareado
+  do teste, 200 amostras, ao menos 80% válidas, mesma seed registrada.
 
-## Versão e rastreabilidade
+Esses limiares são convenções do experimento, não padrões atuariais. O bootstrap
+é condicional aos modelos ajustados: não cobre incerteza de treino, múltiplas
+rodadas ou generalização externa. Um resultado aprovado demonstra ganho apenas
+nesse holdout. Ausência de métricas ou suporte gera **inconclusivo**; Cox é mantido
+por simplicidade. Ganho pontual de C-index sozinho não promove o challenger.
 
-| Campo | Valor |
-|-------|-------|
-| Versão | 1.0 |
-| Data | 2026-09-10 |
-| Dados | Massa sintética Passo 1, seed=42 |
-| Autores | Caio Brandão Santos, Pedro Lucas Figueiredo Santana |
+## Limitações e rastreabilidade
+
+Dados sintéticos não demonstram validade em pessoas reais. Poucos óbitos limitam
+precisão, estabilidade dos coeficientes e testes por subgrupo. Censura independente
+é uma hipótese necessária; 97% censurados não significa 97% sobreviventes em um
+horizonte definido. Calibração global pode ocultar erros opostos entre indivíduos;
+curvas e avaliações por grupo precisam ser lidas junto da métrica.
+
+Versão do código, hashes dos scripts/dataset, bibliotecas, referência, exclusões,
+divisão, hiperparâmetros, métricas e motivos ficam nos manifestos e no
+[experiment record](experiment_record.md). Autores: Caio Brandão Santos e Pedro
+Lucas Figueiredo Santana.
+
+## Referências técnicas
+
+- [C-index e direção do risco — scikit-survival](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.metrics.concordance_index_censored.html).
+- [Brier e pesos IPCW — scikit-survival](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.metrics.brier_score.html).

@@ -3,7 +3,8 @@ Random Survival Forest — Challenger (Passo 2)
 
 Treina um Random Survival Forest (scikit-survival) como modelo challenger
 para comparação com o baseline Cox PH. Só será adotado se apresentar
-ganho mensurável de C-index frente ao Cox.
+ganhos conjuntos de discriminação e calibração no comparador temporal.
+Este script isolado mantém o split aleatório apenas como diagnóstico exploratório.
 
 Uso:
     python scripts/survival_forest.py
@@ -13,7 +14,6 @@ Uso:
 import argparse
 import os
 import sys
-import warnings
 
 import matplotlib
 matplotlib.use("Agg")
@@ -59,9 +59,7 @@ def treinar_rsf(X_train, y_train, seed=42):
         n_jobs=-1,
         random_state=seed,
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        rsf.fit(X_train, y_train)
+    rsf.fit(X_train, y_train)
     return rsf
 
 
@@ -78,18 +76,23 @@ def calcular_metricas(rsf, X_train, X_test, y_train, y_test):
     )[0]
 
     ibs = None
+    ibs_motivo = None
     try:
         tempos_eval = np.percentile(
             y_test["tempo"][y_test["evento"]], np.arange(10, 91, 10)
         )
         if len(tempos_eval) >= 2:
             surv_funcs = rsf.predict_survival_function(X_test)
-            preds = np.row_stack([fn(tempos_eval) for fn in surv_funcs])
+            preds = np.vstack([fn(tempos_eval) for fn in surv_funcs])
             ibs = integrated_brier_score(y_train, y_test, preds, tempos_eval)
-    except Exception:
-        pass
+    except (ValueError, IndexError) as exc:
+        ibs_motivo = str(exc)
+        print(f"IBS indisponível: {ibs_motivo}")
 
+    if ibs is None and ibs_motivo is None:
+        ibs_motivo = "Grade de avaliação insuficiente"
     return {
+        "ibs_motivo": ibs_motivo,
         "c_index_test": c_index,
         "c_index_train": c_index_train,
         "ibs": ibs,
@@ -146,10 +149,11 @@ def main():
 
     base_dir = os.path.dirname(os.path.dirname(__file__))
     dataset_path = args.dataset or os.path.join(base_dir, "data", "dataset_survival.csv")
-    saida_dir = args.saida or os.path.join(base_dir, "data", "graficos")
+    saida_dir = args.saida or os.path.join(os.path.dirname(dataset_path), "graficos_rsf_exploratorio")
     os.makedirs(saida_dir, exist_ok=True)
 
     df = carregar_dataset(dataset_path)
+    print("Split ALEATÓRIO exploratório; decisão de modelo somente em comparar_modelos.py.")
     print(f"Dataset carregado: {len(df)} registros, {df['evento'].sum()} eventos\n")
 
     covariaveis = ["idade_ingresso", "sexo_M", "plano_BD", "plano_CD",
@@ -185,12 +189,14 @@ def main():
 
     curva_sobrevivencia_exemplo(rsf, X_test, y_test, saida_dir)
 
-    metricas_path = os.path.join(base_dir, "data", "metricas_rsf.csv")
+    metricas_path = os.path.join(os.path.dirname(dataset_path), "metricas_rsf_exploratorio.csv")
     pd.DataFrame([{
         "modelo": "Random Survival Forest",
         "c_index_test": metricas["c_index_test"],
         "c_index_train": metricas["c_index_train"],
         "ibs": metricas["ibs"],
+        "ibs_motivo": metricas["ibs_motivo"],
+        "desenho": "aleatorio_exploratorio",
         "n_estimators": 100,
         "n_covariaveis": len(covariaveis),
         "n_treino": len(X_train),

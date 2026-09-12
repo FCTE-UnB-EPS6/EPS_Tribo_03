@@ -51,21 +51,22 @@ Construção da infraestrutura de dados sintéticos e do pipeline de qualidade q
 
 ### O que já foi feito
 
-Implementação completa do pipeline de survival analysis em `survival-analysis/`.
+Implementação revisada do Passo 2 em `survival-analysis/`; resultados oficiais ainda dependem da execução integrada.
 
-- ✅ Dataset analítico de sobrevivência construído a partir de participante, evento e exposição (`construir_dataset.py`), com tempo observado, indicador de evento (óbito), censura e covariáveis (idade_ingresso, sexo, plano_tipo, submassa).
-- ✅ Baseline Kaplan-Meier com curvas de sobrevivência por subgrupo (sexo, plano), log-rank test e gráficos (`kaplan_meier.py`).
-- ✅ Baseline Cox Proportional Hazards com verificação de multicolinearidade (Pearson/Spearman), teste de riscos proporcionais (Schoenfeld), C-index e hazard ratios (`cox_ph.py`).
-- ✅ Challenger Random Survival Forest (scikit-survival) com importância de variáveis, curvas individuais, C-index treino/teste e Integrated Brier Score (`survival_forest.py`).
-- ✅ Comparação champion-challenger por validação temporal (5 folds), com critério objetivo de adoção: ganho de C-index > 0.02 (`comparar_modelos.py`).
-- ✅ Model card documentando propósito, população, dados, métodos, métricas, limitações e restrição ética.
-- ✅ Experiment record com estrutura para registro de cada rodada experimental (métricas a preencher após execução).
-- ✅ Suporte a dois modos: dados do Postgres do Passo 1 (`--fonte banco`) ou geração sintética local (`--fonte local`), permitindo desenvolvimento sem Docker.
+- ✅ Extração das tabelas finais de participante/evento, com exposição agregada para auditoria, uma linha por participante e registro de fonte, hashes e exclusões por inconsistência temporal.
+- ✅ Kaplan-Meier e log-rank global por sexo, BD/CD/CV e submassa Plano A/B/C, com contagens por grupo.
+- ✅ Cox PH interpretável, correlação diagnóstica, Schoenfeld e métricas de treino identificadas como aparentes.
+- ✅ Comparação Cox/RSF no mesmo corte por data de ingresso, limitando os desfechos de treino ao corte; C-index com sinal corrigido, Brier/IBS e calibração direta por KM.
+- ✅ Avaliação por subgrupo, motivos explícitos quando falta suporte e critério de comparação que exige discriminação e calibração, com bootstrap pareado.
+- ✅ Testes de regressão para datas, evento/censura, corte temporal, direção do risco e decisão conjunta; model card e experiment record corrigidos.
+- ✅ Gerador local restrito a desenvolvimento e identificado separadamente; resultados históricos locais preservados como evidência de revisão, sem atribuição à massa oficial.
 
 ### O que ficou pendente
 
-- ⚠️ Rodar o pipeline completo contra o banco Postgres do Passo 1 para obter métricas reais (hoje só a estrutura e o código estão prontos; as métricas no experiment_record estão marcadas como "preencher após execução").
-- ⚠️ Extensão para competing risks (invalidez, aposentadoria, desligamento como eventos separados, não censura) — evolução futura documentada no model card.
+- ⚠️ Executar sobre o Postgres do Passo 1 com lote/versão/referência alinhados; inspecionar exclusões e diferenças da exposição, registrar os números oficiais e avaliar se os eventos suportam a conclusão.
+- ⚠️ A divisão por calendário usa o cadastro atual extraído; não reconstrói integralmente o conhecimento bitemporal disponível no passado. Essa limitação está documentada.
+
+Riscos competitivos estão fora do escopo desta entrega e não são condição para concluir o Passo 2.
 
 ### O que fazer
 
