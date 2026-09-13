@@ -113,6 +113,25 @@ Passo mais avançado do que a versão anterior deste roteiro sugeria — conferi
 
 ✅ Nenhuma dependência para começar — dupla livre, pode rodar em paralelo aos Passos 2 e 3. Só precisa alinhar parâmetros com os Passos 5 e 6 antes de finalizar, para não duplicar premissas divergentes.
 
+### O que já foi feito
+
+- ✅ Contrato econômico inicial `0.1.0` documentado em `cenarios-economicos/docs/SCENARIO_CONTRACT.md` em 2026-09-13: variáveis, unidades, fontes, entrada, saída, regras de ajuste, validação e reprodução.
+- ✅ Planejamento atualizado para integração direta pela API HTTP, sem componente de automação intermediário.
+
+- ✅ Premissas sintéticas e regras aditivas dos três cenários criadas em `cenarios-economicos/config/`, versão `0.1.0`, com fontes internas, responsáveis e justificativas em `docs/ASSUMPTIONS.md`. Exemplo completo de requisição em `examples/`; valores conferidos com aritmética decimal, sem execução de gerador.
+
+- ✅ Núcleo determinístico `0.1.0` implementado em `cenarios-economicos/app/services/scenario_generator.py`, com validação, aritmética decimal exata, trajetórias anuais e snapshots independentes. Os 18 testes locais passaram; evidência em `cenarios-economicos/docs/CORE_VALIDATION.md`.
+
+- ✅ Camada de aplicação e persistência PostgreSQL implementadas: IDs, horário UTC, snapshots, consulta de execuções/cenários, transação atômica e conflito de versões sob concorrência. Cliente local disponível via `python -m app`; testes com PostgreSQL real registrados em `cenarios-economicos/docs/PERSISTENCE_VALIDATION.md`.
+
+- ✅ API FastAPI implementada em `cenarios-economicos/app/main.py`: health, geração HTTP 201 após commit, consultas, erros estruturados e documentação OpenAPI. Suíte com 45 testes aprovada e fluxo real via Uvicorn/PostgreSQL verificado; evidência em `cenarios-economicos/docs/API_VALIDATION.md`.
+
+- ✅ Containerização implementada: imagem com usuário não root, Compose com PostgreSQL interno, volume persistente, migração antes da API, health check e Compose de testes isolado. Os 45 testes passaram dentro do Docker; evidência em `cenarios-economicos/docs/CONTAINER_VALIDATION.md`.
+
+### O que ficou pendente
+
+- ⚠️ Alinhar o contrato com os Passos 5 e 6 e identificar os consumidores de projeção/avaliação. A versão inicial ainda não está estabilizada entre as duplas.
+
 ### O que fazer
 
 Bloco relativamente independente dos demais — pode começar assim que houver clareza sobre quais variáveis econômicas o projeto vai precisar (taxa de juros, inflação, etc. aplicáveis ao CD/CV).
@@ -120,7 +139,7 @@ Bloco relativamente independente dos demais — pode começar assim que houver c
 - Começar por cenários determinísticos parametrizáveis — nada de Monte Carlo ainda, seguindo o princípio de baseline antes de complexidade.
 - Definir as premissas econômicas de forma versionada e documentada, do mesmo jeito que o dataset sintético.
 - Monte Carlo, correlações entre fatores e stress testing entram só como evolução condicionada, depois que os cenários determinísticos estiverem validados e houver necessidade demonstrada.
-- Alinhar com o Passo 5 (tábua própria) e o Passo 6 (geracional) quais parâmetros econômicos essas tábuas vão consumir, para não duplicar premissas divergentes.
+- Alinhar com o Passo 5 (tábua própria) e o Passo 6 (geracional) se haverá consumo direto de parâmetros econômicos ou integração no componente de projeção, para não duplicar premissas divergentes.
 
 ---
 
