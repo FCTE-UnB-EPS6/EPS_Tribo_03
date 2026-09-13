@@ -1,0 +1,1 @@
+"""Persistência das execuções econômicas."""
