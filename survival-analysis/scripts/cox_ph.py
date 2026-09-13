@@ -123,7 +123,7 @@ def imprimir_resumo(cph, df):
     significativos = coefs[coefs["p"] < 0.05]
     print(f"\nCovariáveis significativas (p < 0.05): {len(significativos)}/{len(coefs)}")
     for idx, row in significativos.iterrows():
-        direcao = "↑ risco" if row["exp(coef)"] > 1 else "↓ risco"
+        direcao = "aumenta risco" if row["exp(coef)"] > 1 else "reduz risco"
         print(f"  {idx}: HR={row['exp(coef)']:.3f} ({direcao}), p={row['p']:.4f}")
 
 
