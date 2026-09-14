@@ -1,0 +1,6 @@
+psycopg2-binary>=2.9.10
+scipy>=1.11
+numpy>=1.24
+pandas>=2.0
+statsmodels>=0.14
+openpyxl>=3.1
