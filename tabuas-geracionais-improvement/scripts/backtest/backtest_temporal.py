@@ -9,7 +9,7 @@ Exigência estrita do Definition of Done (§3/§8 DoD):
 justificado."
 
 Uso:
-    python scripts/backtest_temporal.py
+    python scripts/backtest/backtest_temporal.py
 """
 
 from datetime import date
@@ -18,22 +18,22 @@ import csv
 import sys
 import numpy as np
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import PASTA_BACKTEST, LIMIAR_GANHO_COMPLEXIDADE, PROPORCAO_HOLDOUT
-from series_temporais import carregar_dados
-from modelo_baseline import treinar_baseline, projetar_baseline
-from modelo_lee_carter import treinar_lee_carter, projetar_lee_carter
+from dados.series_temporais import carregar_dados
+from modelos.baseline import treinar_baseline, projetar_baseline
+from modelos.lee_carter import treinar_lee_carter, projetar_lee_carter
 
 
 def separar_treino_holdout(linhas, proporcao_holdout=PROPORCAO_HOLDOUT):
     """Separa os anos mais recentes como conjunto de teste/holdout."""
     anos = sorted({l["ano"] for l in linhas})
     n_holdout = max(1, int(round(len(anos) * proporcao_holdout)))
-    
+
     anos_treino = anos[:-n_holdout]
     anos_holdout = anos[-n_holdout:]
 
@@ -190,7 +190,7 @@ def main():
     linhas, origem = carregar_dados()
     res = executar_backtest(linhas)
     relatorio = montar_relatorio(res)
-    
+
     caminho = PASTA_BACKTEST / f"backtest_temporal_{date.today().isoformat()}.md"
     gravar_relatorio(relatorio, caminho)
 

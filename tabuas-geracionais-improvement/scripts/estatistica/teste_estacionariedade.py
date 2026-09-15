@@ -9,7 +9,7 @@ Exigência explícita do §3/§8 (Definition of Done) para justificar o método 
 projeção temporal (ex.: Passeio Aleatório com Drift no modelo Lee-Carter).
 
 Uso:
-    python scripts/teste_estacionariedade.py
+    python scripts/estatistica/teste_estacionariedade.py
 """
 
 from collections import defaultdict
@@ -19,13 +19,13 @@ import sys
 import numpy as np
 import warnings
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import PASTA_TESTES_ESTATISTICOS
-from series_temporais import carregar_dados
+from dados.series_temporais import carregar_dados
 
 try:
     from statsmodels.tsa.stattools import adfuller, kpss

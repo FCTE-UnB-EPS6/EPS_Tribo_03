@@ -2,13 +2,13 @@
 Suíte de Testes Automatizados — Passo 6 (Tábuas Geracionais)
 
 Valida as propriedades matemáticas, estatísticas e atuariais de cada módulo:
-    - Agregação de séries temporais
-    - Teste de tendência de Mann-Kendall
-    - Testes de raiz unitária ADF e KPSS
-    - Modelo Baseline de Mortality Improvement
-    - Modelo Lee-Carter (SVD, normalizações canônicas e Random Walk com Drift)
-    - Backtesting temporal e gate de promoção do DoD
-    - Projeção da Tábua Geracional
+    - Agregação de séries temporais (dados/)
+    - Teste de tendência de Mann-Kendall (estatistica/)
+    - Testes de raiz unitária ADF e KPSS (estatistica/)
+    - Modelo Baseline de Mortality Improvement (modelos/)
+    - Modelo Lee-Carter SVD e Random Walk com Drift (modelos/)
+    - Backtesting temporal e gate de promoção do DoD (backtest/)
+    - Projeção da Tábua Geracional (projecao/)
 
 Uso:
     python -m unittest tests/test_passo6.py
@@ -24,22 +24,22 @@ PASTA_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
-from ingestao_passos import (
+from dados.ingestao_passos import (
     carregar_historico_mortalidade,
     carregar_tabua_base_passo5,
     carregar_premissas_passo4,
 )
-from teste_mann_kendall import calcular_mann_kendall
-from teste_estacionariedade import testar_adf, testar_kpss, interpretar_estacionariedade
-from modelo_baseline import treinar_baseline, projetar_baseline
-from modelo_lee_carter import (
+from estatistica.teste_mann_kendall import calcular_mann_kendall
+from estatistica.teste_estacionariedade import testar_adf, testar_kpss, interpretar_estacionariedade
+from modelos.baseline import treinar_baseline, projetar_baseline
+from modelos.lee_carter import (
     montar_matriz_mortalidade,
     ajustar_lee_carter,
     treinar_lee_carter,
     projetar_lee_carter,
 )
-from backtest_temporal import separar_treino_holdout, avaliar_previsoes, executar_backtest
-from tabua_geracional import gerar_projecao
+from backtest.backtest_temporal import separar_treino_holdout, avaliar_previsoes, executar_backtest
+from projecao.tabua_geracional import gerar_projecao
 
 
 class TestPasso6(unittest.TestCase):
@@ -103,7 +103,7 @@ class TestPasso6(unittest.TestCase):
         self.assertLessEqual(q_t10, q_t0)
 
     def test_modelo_lee_carter_restricoes_canonicas(self):
-        """Lee-Carter canônico exige sum(bx) = 1.0 e sum(kt) = 0.0."""
+        """Lee-Carter canônico exige sum(bx) = 1.0 e mean(kt) = 0.0."""
         modelo = treinar_lee_carter(self.dados_teste)
 
         soma_bx = float(np.sum(modelo["bx"]))
@@ -153,17 +153,17 @@ class TestPasso6(unittest.TestCase):
             self.assertGreater(l["qx_projetado"], 0.0)
             self.assertLess(l["qx_projetado"], 1.0)
 
-    def test_estrutura_simplificada_e_config(self):
-        """Valida a importação direta através dos scripts e config.py."""
+    def test_estrutura_modular_e_config(self):
+        """Valida a importação através dos subpacotes modulares e config.py."""
         import config
-        from db import conectar
-        from series_temporais import carregar_dados
-        from teste_mann_kendall import calcular_mann_kendall as mk
-        from teste_estacionariedade import testar_adf as adf
-        from modelo_baseline import treinar_baseline as tb
-        from modelo_lee_carter import treinar_lee_carter as tlc
-        from backtest_temporal import executar_backtest as eb
-        from tabua_geracional import gerar_projecao as gp
+        from dados.db import conectar
+        from dados.series_temporais import carregar_dados
+        from estatistica.teste_mann_kendall import calcular_mann_kendall as mk
+        from estatistica.teste_estacionariedade import testar_adf as adf
+        from modelos.baseline import treinar_baseline as tb
+        from modelos.lee_carter import treinar_lee_carter as tlc
+        from backtest.backtest_temporal import executar_backtest as eb
+        from projecao.tabua_geracional import gerar_projecao as gp
 
         self.assertEqual(config.HORIZONTE_PROJECAO_ANOS, 30)
         self.assertEqual(config.LIMIAR_GANHO_COMPLEXIDADE, 0.05)
@@ -196,4 +196,3 @@ class TestPasso6(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

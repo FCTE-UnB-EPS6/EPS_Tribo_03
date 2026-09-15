@@ -15,16 +15,22 @@ import csv
 import json
 import math
 from pathlib import Path
+import sys
 import pandas as pd
 
-# Raízes relativas do workspace (sem tocar em nenhuma pasta fora de tabuas-geracionais-improvement)
-RAIZ_PROJETO = Path(__file__).resolve().parent.parent.parent
+# Adiciona scripts/ ao sys.path para imports limpos tanto standalone quanto em pacote
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
+if str(PASTA_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(PASTA_SCRIPTS))
+
+# Raízes relativas do workspace (sem tocar em pastas fora de tabuas-geracionais-improvement)
+RAIZ_PROJETO = Path(__file__).resolve().parents[3]
 PASTA_PASSO1_REFS = RAIZ_PROJETO / "ambiente-de-dados" / "docs" / "referencias"
 PASTA_PASSO4_CONFIG = RAIZ_PROJETO / "cenarios-economicos" / "config"
 PASTA_PASSO5_DOCS = RAIZ_PROJETO / "tabua-biometrica-propria" / "docs" / "tabua_propria"
 
 try:
-    from db import conectar
+    from dados.db import conectar
 except ImportError:
     from .db import conectar
 
@@ -97,7 +103,6 @@ def carregar_historico_mortalidade(idades_alvo=range(20, 71)):
             idade = int(row["Age"])
             qx = float(row["qx"])
             mx = float(row["mx"])
-            # dx é a contagem de óbitos por 100.000 (lx)
             obitos = int(round(float(row.get("dx", 0))))
             exposicao = float(row.get("Lx", 100000.0))
             linhas.append({
@@ -152,7 +157,6 @@ def carregar_tabua_base_passo5():
 def carregar_premissas_passo4():
     """Carrega parâmetros macroeconômicos e horizonte de projeção do Passo 4."""
     arquivo_assumptions = PASTA_PASSO4_CONFIG / "assumptions.demo.v0.1.0.json"
-    arquivo_rules = PASTA_PASSO4_CONFIG / "scenario_rules.demo.v0.1.0.json"
 
     horizonte_padrao = 30
     cenarios = {"base": 1.0, "adverso": 1.2, "favoravel": 0.85}

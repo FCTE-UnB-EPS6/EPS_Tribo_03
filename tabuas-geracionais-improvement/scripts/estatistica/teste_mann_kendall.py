@@ -8,7 +8,7 @@ Exigência explícita do §3/§8 (Definition of Done) para comprovar direção
 estatisticamente significativa de redução da mortalidade (mortality improvement).
 
 Uso:
-    python scripts/teste_mann_kendall.py
+    python scripts/estatistica/teste_mann_kendall.py
 """
 
 from collections import defaultdict
@@ -18,13 +18,13 @@ import sys
 import numpy as np
 from scipy.stats import norm
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import ALPHA, PASTA_TESTES_ESTATISTICOS
-from series_temporais import carregar_dados
+from dados.series_temporais import carregar_dados
 
 
 def calcular_mann_kendall(valores):

@@ -1,23 +1,26 @@
-"""Pacote Scripts — Passo 6: Tábuas Geracionais e Mortality Improvement."""
+"""
+Passo 6 — Tábuas Geracionais e Mortality Improvement (Tribo 3)
 
-from . import config
-from . import db
-from . import series_temporais
-from . import teste_mann_kendall
-from . import teste_estacionariedade
-from . import modelo_baseline
-from . import modelo_lee_carter
-from . import backtest_temporal
-from . import tabua_geracional
+Estrutura modular de pacotes:
+    - dados: ingestão PostgreSQL, fallback HMD/IBGE e séries temporais
+    - estatistica: testes de hipótese Mann-Kendall, ADF e KPSS
+    - modelos: modelos Baseline e Lee-Carter (SVD + Drift)
+    - backtest: avaliação Champion-Challenger e métricas fora da amostra
+    - projecao: tábua geracional oficial projetada a 30 anos
+"""
+
+from .config import (
+    HORIZONTE_PROJECAO_ANOS,
+    LIMIAR_GANHO_COMPLEXIDADE,
+    ALPHA,
+    LIMITE_FX_MAX,
+    PROPORCAO_HOLDOUT,
+)
 
 __all__ = [
-    "config",
-    "db",
-    "series_temporais",
-    "teste_mann_kendall",
-    "teste_estacionariedade",
-    "modelo_baseline",
-    "modelo_lee_carter",
-    "backtest_temporal",
-    "tabua_geracional",
+    "HORIZONTE_PROJECAO_ANOS",
+    "LIMIAR_GANHO_COMPLEXIDADE",
+    "ALPHA",
+    "LIMITE_FX_MAX",
+    "PROPORCAO_HOLDOUT",
 ]

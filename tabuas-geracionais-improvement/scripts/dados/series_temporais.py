@@ -11,7 +11,7 @@ Conecta-se diretamente às fontes oficiais dos passos anteriores:
 Sem dados inventados: respeita 100% as estruturas e dados reais dos outros passos.
 
 Uso:
-    python scripts/series_temporais.py
+    python scripts/dados/series_temporais.py
 """
 
 from datetime import date
@@ -19,13 +19,13 @@ from pathlib import Path
 import csv
 import sys
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import PASTA_SERIES_TEMPORAIS
-from ingestao_passos import carregar_historico_mortalidade
+from dados.ingestao_passos import carregar_historico_mortalidade
 
 
 def carregar_dados():
