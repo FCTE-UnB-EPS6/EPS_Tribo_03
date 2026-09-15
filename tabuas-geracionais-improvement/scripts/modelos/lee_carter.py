@@ -9,7 +9,7 @@ Ajuste via SVD (Singular Value Decomposition) de posto 1 e projeção do índice
 via Passeio Aleatório com Drift (Random Walk with Drift).
 
 Uso:
-    python scripts/modelo_lee_carter.py
+    python scripts/modelos/lee_carter.py
 """
 
 from collections import defaultdict
@@ -18,13 +18,13 @@ from pathlib import Path
 import sys
 import numpy as np
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import PASTA_TABUA_GERACIONAL
-from series_temporais import carregar_dados
+from dados.series_temporais import carregar_dados
 
 
 def montar_matriz_mortalidade(linhas):
@@ -58,7 +58,13 @@ def ajustar_lee_carter(idades, anos, matriz_mx):
     v1 = vt[0, :]
     s1 = s[0]
 
-    # 4. Normalização padrão: sum(bx) = 1 e sum(kt) = 0
+    # Convenção canônica: se a trajetória de v1 for crescente no tempo,
+    # orienta ambos os autovetores para que kt decresça à medida que a mortalidade cai
+    if len(v1) > 1 and v1[-1] > v1[0]:
+        u1 = -u1
+        v1 = -v1
+
+    # 4. Normalização padrão: sum(bx) = 1 e mean(kt) = 0
     soma_u = np.sum(u1)
     if abs(soma_u) < 1e-9:
         soma_u = 1.0
@@ -69,11 +75,6 @@ def ajustar_lee_carter(idades, anos, matriz_mx):
     media_kt = np.mean(kt)
     kt = kt - media_kt
     ax = ax + bx * media_kt
-
-    # Convenção: kt deve decrescer quando a mortalidade cai
-    if kt[-1] > kt[0]:
-        bx = -bx
-        kt = -kt
 
     # 5. Drift do passeio aleatório de kt: d = (kt[-1] - kt[0]) / (T - 1)
     drift = (kt[-1] - kt[0]) / max(len(kt) - 1, 1)

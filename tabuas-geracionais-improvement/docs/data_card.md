@@ -15,13 +15,13 @@ Tábua biométrica geracional (dinâmica) e escala de melhoria de mortalidade (*
 
 | Etapa | Script | Entrada | Saída |
 | :--- | :--- | :--- | :--- |
-| Séries Temporais | `series_temporais.py` | Tabela `exposicao` do banco | `docs/series_temporais/*.csv` |
-| Teste Mann-Kendall | `teste_mann_kendall.py` | Séries históricas de $m_{x,t}$ | `docs/testes_estatisticos/teste_mann_kendall_*.md` |
-| Estacionariedade | `teste_estacionariedade.py` | Séries temporais de $\ln(m_t)$ | `docs/testes_estatisticos/teste_estacionariedade_*.md` |
-| Modelo Baseline | `modelo_baseline.py` | Séries históricas de treino | Parâmetros $f_x$ e $q_{x, t_0}$ |
-| Modelo Lee-Carter | `modelo_lee_carter.py` | Matriz histórica de $m_{x,t}$ | Parâmetros $\alpha_x, \beta_x, \kappa_t, d$ |
-| Backtesting Temporal | `backtest_temporal.py` | Treino vs Holdout | `docs/backtest/backtest_temporal_*.md` |
-| Tábua Geracional | `tabua_geracional.py` | Modelo Campeão + Passo 5 | `docs/tabua_geracional/*.csv` e `*.md` |
+| Séries Temporais | `dados/series_temporais.py` | Tabela `exposicao` do banco | `docs/series_temporais/*.csv` |
+| Teste Mann-Kendall | `estatistica/teste_mann_kendall.py` | Séries históricas de $m_{x,t}$ | `docs/testes_estatisticos/teste_mann_kendall_*.md` |
+| Estacionariedade | `estatistica/teste_estacionariedade.py` | Séries temporais de $\ln(m_t)$ | `docs/testes_estatisticos/teste_estacionariedade_*.md` |
+| Modelo Baseline | `modelos/baseline.py` | Séries históricas de treino | Parâmetros $f_x$ e $q_{x, t_0}$ |
+| Modelo Lee-Carter | `modelos/lee_carter.py` | Matriz histórica de $m_{x,t}$ | Parâmetros $\alpha_x, \beta_x, \kappa_t, d$ |
+| Backtesting Temporal | `backtest/backtest_temporal.py` | Treino vs Holdout | `docs/backtest/backtest_temporal_*.md` |
+| Tábua Geracional | `projecao/tabua_geracional.py` | Modelo Campeão + Passo 5 | `docs/tabua_geracional/*.csv` e `*.md` |
 
 ## Limitações dos Dados e Cuidados Atuariais
 

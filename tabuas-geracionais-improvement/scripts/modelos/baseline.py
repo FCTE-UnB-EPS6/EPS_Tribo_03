@@ -11,7 +11,7 @@ da série histórica, projetando:
 Com travas atuariais de sanidade para evitar taxas negativas ou melhorias irreais.
 
 Uso:
-    python scripts/modelo_baseline.py
+    python scripts/modelos/baseline.py
 """
 
 from collections import defaultdict
@@ -20,13 +20,13 @@ from pathlib import Path
 import sys
 import numpy as np
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import LIMITE_FX_MAX, PASTA_TABUA_GERACIONAL
-from series_temporais import carregar_dados
+from dados.series_temporais import carregar_dados
 
 
 def agrupar_por_idade(linhas):

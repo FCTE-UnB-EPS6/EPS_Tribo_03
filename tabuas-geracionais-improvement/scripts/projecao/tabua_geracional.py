@@ -12,7 +12,7 @@ Gera:
     2. Relatório Markdown com métricas de melhoria por faixa etária e veredito do DoD.
 
 Uso:
-    python scripts/tabua_geracional.py
+    python scripts/projecao/tabua_geracional.py
 """
 
 from datetime import date
@@ -21,17 +21,17 @@ import csv
 import sys
 import numpy as np
 
-# Garante import local direto
-PASTA_SCRIPTS = Path(__file__).resolve().parent
+# Adiciona scripts/ ao sys.path para imports limpos
+PASTA_SCRIPTS = Path(__file__).resolve().parents[1]
 if str(PASTA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PASTA_SCRIPTS))
 
 from config import PASTA_TABUA_GERACIONAL
-from series_temporais import carregar_dados
-from modelo_baseline import treinar_baseline, projetar_baseline
-from modelo_lee_carter import treinar_lee_carter, projetar_lee_carter
-from backtest_temporal import executar_backtest
-from ingestao_passos import carregar_tabua_base_passo5, carregar_premissas_passo4
+from dados.series_temporais import carregar_dados
+from dados.ingestao_passos import carregar_tabua_base_passo5, carregar_premissas_passo4
+from modelos.baseline import treinar_baseline, projetar_baseline
+from modelos.lee_carter import treinar_lee_carter, projetar_lee_carter
+from backtest.backtest_temporal import executar_backtest
 
 
 def gerar_projecao(linhas, horizonte=None):

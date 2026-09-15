@@ -2,11 +2,11 @@
 Passo 6 — Orquestrador Principal: Tábuas Geracionais e Mortality Improvement
 
 Ponto único de entrada para executar todas as etapas sequenciais do Passo 6:
-    1. series_temporais.py       — Extração e agregação de dados históricos
-    2. teste_mann_kendall.py     — Teste não-paramétrico de tendência de mortalidade
-    3. teste_estacionariedade.py — Testes econométricos ADF e KPSS de raiz unitária
-    4. backtest_temporal.py      — Backtesting cego e seleção Champion-Challenger (DoD)
-    5. tabua_geracional.py       — Projeção dinâmica a 30 anos e consolidação da tábua
+    1. dados/series_temporais.py       — Extração e agregação de dados históricos
+    2. estatistica/teste_mann_kendall.py — Teste não-paramétrico de tendência de mortalidade
+    3. estatistica/teste_estacionariedade.py — Testes econométricos ADF e KPSS de raiz unitária
+    4. backtest/backtest_temporal.py      — Backtesting cego e seleção Champion-Challenger (DoD)
+    5. projecao/tabua_geracional.py       — Projeção dinâmica a 30 anos e consolidação da tábua
 
 Uso:
     python scripts/main.py
@@ -19,16 +19,16 @@ from pathlib import Path
 PASTA_SCRIPTS = Path(__file__).resolve().parent
 
 ETAPAS = [
-    ("series_temporais.py", "Agregação da série temporal de mortalidade"),
-    ("teste_mann_kendall.py", "Teste de tendência não-paramétrica de Mann-Kendall"),
-    ("teste_estacionariedade.py", "Testes de raiz unitária ADF e KPSS"),
-    ("backtest_temporal.py", "Backtesting temporal e seleção Champion-Challenger"),
-    ("tabua_geracional.py", "Consolidação e projeção da Tábua Geracional"),
+    ("dados/series_temporais.py", "Agregação da série temporal de mortalidade"),
+    ("estatistica/teste_mann_kendall.py", "Teste de tendência não-paramétrica de Mann-Kendall"),
+    ("estatistica/teste_estacionariedade.py", "Testes de raiz unitária ADF e KPSS"),
+    ("backtest/backtest_temporal.py", "Backtesting temporal e seleção Champion-Challenger"),
+    ("projecao/tabua_geracional.py", "Consolidação e projeção da Tábua Geracional"),
 ]
 
 
-def rodar_etapa(nome_script):
-    caminho = PASTA_SCRIPTS / nome_script
+def rodar_etapa(rel_caminho_script):
+    caminho = PASTA_SCRIPTS / rel_caminho_script
     res = subprocess.run([sys.executable, str(caminho)], cwd=PASTA_SCRIPTS)
     return res.returncode == 0
 

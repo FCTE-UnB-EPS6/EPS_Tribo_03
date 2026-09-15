@@ -13,13 +13,13 @@ No Passo 5, foi produzida uma taxa estática $q_x$ (probabilidade de morte fixa 
 
 O **Passo 6** resolve isso projetando $q(x, t)$ (idade $x$ no ano de calendário $t$), garantindo conformidade estrita com o Definition of Done (§3/§8 DoD):
 
-1. **Séries Temporais Históricas** (`scripts/series_temporais.py`): extrai e agrega óbitos e exposição por ano de calendário e idade inteira.
-2. **Teste de Tendência de Mann-Kendall** (`scripts/teste_mann_kendall.py`): teste estatístico não-paramétrico exigido pelo DoD para confirmar a direção e significância estatística do *mortality improvement*.
-3. **Testes de Estacionariedade ADF e KPSS** (`scripts/teste_estacionariedade.py`): avaliação econométrica de raiz unitária na série temporal de mortalidade, fundamentando a modelagem via passeio aleatório com *drift*.
-4. **Modelo Baseline de Projeção** (`scripts/modelo_baseline.py`): modelo atuarial de referência (extrapolação de melhoria anual geométrica/exponencial $f_x$).
-5. **Modelo Estocástico de Lee-Carter** (`scripts/modelo_lee_carter.py`): decomposição canônica via SVD ($\ln(m_{x,t}) = \alpha_x + \beta_x \kappa_t$) e projeção de $\kappa_t$ por Random Walk with Drift.
-6. **Backtesting Temporal** (`scripts/backtest_temporal.py`): holdout temporal nos anos mais recentes; o modelo complexo (Lee-Carter) só é adotado se obtiver ganho mensurável no RMSE fora da amostra (critério DoD).
-7. **Consolidação da Tábua Geracional** (`scripts/tabua_geracional.py`): geração da matriz de projeção $q(x,t)$ para um horizonte de 30 anos, com taxas anuais de *improvement* e tabela formatada por coorte.
+1. **Séries Temporais Históricas** (`scripts/dados/series_temporais.py`): extrai e agrega óbitos e exposição por ano de calendário e idade inteira.
+2. **Teste de Tendência de Mann-Kendall** (`scripts/estatistica/teste_mann_kendall.py`): teste estatístico não-paramétrico exigido pelo DoD para confirmar a direção e significância estatística do *mortality improvement*.
+3. **Testes de Estacionariedade ADF e KPSS** (`scripts/estatistica/teste_estacionariedade.py`): avaliação econométrica de raiz unitária na série temporal de mortalidade, fundamentando a modelagem via passeio aleatório com *drift*.
+4. **Modelo Baseline de Projeção** (`scripts/modelos/baseline.py`): modelo atuarial de referência (extrapolação de melhoria anual geométrica/exponencial $f_x$).
+5. **Modelo Estocástico de Lee-Carter** (`scripts/modelos/lee_carter.py`): decomposição canônica via SVD ($\ln(m_{x,t}) = \alpha_x + \beta_x \kappa_t$) e projeção de $\kappa_t$ por Random Walk with Drift.
+6. **Backtesting Temporal** (`scripts/backtest/backtest_temporal.py`): holdout temporal nos anos mais recentes; o modelo complexo (Lee-Carter) só é adotado se obtiver ganho mensurável no RMSE fora da amostra (critério DoD).
+7. **Consolidação da Tábua Geracional** (`scripts/projecao/tabua_geracional.py`): geração da matriz de projeção $q(x,t)$ para um horizonte de 30 anos, com taxas anuais de *improvement* e tabela formatada por coorte.
 
 ---
 
@@ -32,6 +32,7 @@ tabuas-geracionais-improvement/
 │   ├── data_card.md
 │   ├── model_card.md
 │   ├── experiment_record.md
+│   ├── interfaces_interpassos.md
 │   ├── series_temporais/         # CSVs da série histórica observada
 │   ├── testes_estatisticos/      # Relatórios de Mann-Kendall, ADF e KPSS
 │   ├── backtest/                 # Avaliação comparativa de erro fora da amostra
@@ -45,15 +46,21 @@ tabuas-geracionais-improvement/
 │   ├── requirements.txt          # Dependências do projeto
 │   ├── main.py                   # 1. Arquivo principal (executa todo o fluxo do Passo 6)
 │   ├── pipeline.py               # Atalho para main.py
-│   ├── config.py                 # 2. Arquivo de configuração (docs/ e constantes atuariais)
-│   ├── db.py                     # Conexão com banco de dados PostgreSQL
-│   ├── series_temporais.py       # Etapa 1: Agregação da série histórica
-│   ├── teste_mann_kendall.py     # Etapa 2: Teste estatístico de tendência de queda
-│   ├── teste_estacionariedade.py # Etapa 3: Testes de raiz unitária ADF e KPSS
-│   ├── modelo_baseline.py        # Modelo simples de redução anual (fx)
-│   ├── modelo_lee_carter.py      # Modelo estocástico Lee-Carter
-│   ├── backtest_temporal.py      # Etapa 4: Backtest temporal e seleção Champion-Challenger
-│   └── tabua_geracional.py       # Etapa 5: Tábua geracional consolidada a 30 anos
+│   ├── config.py                 # Configurações centrais e constantes atuariais
+│   ├── dados/                    # Pacote de ingestão e preparação de dados
+│   │   ├── db.py                 # Conexão com banco de dados PostgreSQL
+│   │   ├── ingestao_passos.py    # Ingestão direta dos Passos 1, 3, 4 e 5
+│   │   └── series_temporais.py   # Etapa 1: Agregação da série histórica
+│   ├── estatistica/              # Pacote de testes estatísticos
+│   │   ├── teste_mann_kendall.py # Etapa 2: Teste estatístico de tendência de queda
+│   │   └── teste_estacionariedade.py # Etapa 3: Testes de raiz unitária ADF e KPSS
+│   ├── modelos/                  # Pacote de modelos atuariais
+│   │   ├── baseline.py           # Modelo simples de redução anual (fx)
+│   │   └── lee_carter.py         # Modelo estocástico Lee-Carter
+│   ├── backtest/                 # Pacote de avaliação fora da amostra
+│   │   └── backtest_temporal.py  # Etapa 4: Backtest temporal e seleção Champion-Challenger
+│   └── projecao/                 # Pacote de consolidação final
+│       └── tabua_geracional.py   # Etapa 5: Tábua geracional consolidada a 30 anos
 └── tests/
     └── test_passo6.py            # Suíte de testes automatizados
 ```
@@ -72,15 +79,16 @@ Roda as 5 etapas em sequência metodológica e para no primeiro erro:
 ```bash
 python scripts/pipeline.py
 ```
+*(Ou `python scripts/main.py`)*
 
 ### 3. Execução Isolada de Etapas
-Cada etapa pode ser executada individualmente:
+Cada etapa pode ser executada individualmente a partir da sua subpasta:
 ```bash
-python scripts/series_temporais.py
-python scripts/teste_mann_kendall.py
-python scripts/teste_estacionariedade.py
-python scripts/backtest_temporal.py
-python scripts/tabua_geracional.py
+python scripts/dados/series_temporais.py
+python scripts/estatistica/teste_mann_kendall.py
+python scripts/estatistica/teste_estacionariedade.py
+python scripts/backtest/backtest_temporal.py
+python scripts/projecao/tabua_geracional.py
 ```
 
 ### 4. Execução dos Testes Automatizados
