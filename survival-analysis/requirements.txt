@@ -1,0 +1,9 @@
+# Versões da rodada de verificação; ambiente Python 3.12.
+lifelines==0.30.0
+scikit-survival==0.25.0
+scikit-learn==1.6.1
+pandas==2.2.3
+numpy==2.2.6
+matplotlib==3.10.3
+psycopg2-binary==2.9.10
+scipy==1.15.3
