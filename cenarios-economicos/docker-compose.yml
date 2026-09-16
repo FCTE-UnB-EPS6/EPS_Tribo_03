@@ -1,0 +1,58 @@
+# Demonstração local: apenas a API publica porta, ligada ao loopback do host.
+x-backend: &backend
+  image: tribo3-economic-scenario:local
+  build:
+    context: .
+    target: runtime
+  environment:
+    ESG_DATABASE_URL: "host=postgres port=5432 dbname=esg user=esg"
+    PGPASSWORD: ${ESG_POSTGRES_PASSWORD:-esg_local_demo}
+  networks: [internal]
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: [no-new-privileges:true]
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: esg
+      POSTGRES_DB: esg
+      POSTGRES_PASSWORD: ${ESG_POSTGRES_PASSWORD:-esg_local_demo}
+    volumes:
+      - esg_pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U esg -d esg"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: [python, -m, app, init-db]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  economic-scenario-api:
+    <<: *backend
+    networks: [internal, api-access]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${ESG_API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+volumes:
+  esg_pgdata:
+
+networks:
+  internal:
+    internal: true
+  api-access:

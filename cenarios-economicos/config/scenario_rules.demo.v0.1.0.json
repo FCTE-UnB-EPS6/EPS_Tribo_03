@@ -1,0 +1,42 @@
+{
+  "ruleset_id": "demo-additive",
+  "ruleset_version": "0.1.0",
+  "description": "Regras sintéticas aditivas constantes, exclusivamente demonstrativas.",
+  "responsible": "Carlos Henrique de Souza Bispo e Paulo Henrique Virgilio Cerqueira",
+  "reference": "docs/ASSUMPTIONS.md@0.1.0",
+  "scenarios": {
+    "base": {
+      "label": "Base",
+      "rationale": "Manter integralmente as premissas sintéticas de entrada.",
+      "target_metric": "illustrative_only",
+      "adjustments": {
+        "inflation": 0,
+        "discount_rate": 0,
+        "salary_growth": 0,
+        "asset_return": 0
+      }
+    },
+    "adverse": {
+      "label": "Adverso",
+      "rationale": "Combinação ilustrativa de inflação e crescimento salarial maiores, desconto e retorno menores. O efeito sobre resultados do plano depende do consumidor.",
+      "target_metric": "illustrative_only",
+      "adjustments": {
+        "inflation": 0.02,
+        "discount_rate": -0.02,
+        "salary_growth": 0.01,
+        "asset_return": -0.03
+      }
+    },
+    "favorable": {
+      "label": "Favorável",
+      "rationale": "Combinação ilustrativa de inflação e crescimento salarial menores, desconto e retorno maiores. Não implica melhoria comprovada de solvência.",
+      "target_metric": "illustrative_only",
+      "adjustments": {
+        "inflation": -0.01,
+        "discount_rate": 0.01,
+        "salary_growth": -0.005,
+        "asset_return": 0.02
+      }
+    }
+  }
+}
