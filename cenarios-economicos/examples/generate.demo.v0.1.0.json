@@ -1,0 +1,55 @@
+{
+  "contract_version": "0.1.0",
+  "base_date": "2026-09-13",
+  "horizon_years": 10,
+  "assumption_set_id": "demo-economic",
+  "assumption_version": "0.1.0",
+  "unit": "annual_decimal",
+  "rate_basis": "nominal",
+  "assumptions": {
+    "inflation": 0.04,
+    "discount_rate": 0.08,
+    "salary_growth": 0.045,
+    "asset_return": 0.09
+  },
+  "sources": {
+    "inflation": {
+      "kind": "synthetic",
+      "reference": "docs/ASSUMPTIONS.md",
+      "reference_version": "0.1.0",
+      "reference_date": "2026-09-13",
+      "description": "Índice de preços fictício, sem vinculação a IPCA ou outro índice observado.",
+      "rationale": "Valor sintético de 4% para exercitar ajustes aditivos.",
+      "responsible": "Carlos Henrique de Souza Bispo e Paulo Henrique Virgilio Cerqueira"
+    },
+    "discount_rate": {
+      "kind": "synthetic",
+      "reference": "docs/ASSUMPTIONS.md",
+      "reference_version": "0.1.0",
+      "reference_date": "2026-09-13",
+      "description": "Taxa nominal de desconto fictícia, constante por período anual.",
+      "rationale": "Valor sintético de 8% independente do retorno dos ativos.",
+      "responsible": "Carlos Henrique de Souza Bispo e Paulo Henrique Virgilio Cerqueira"
+    },
+    "salary_growth": {
+      "kind": "synthetic",
+      "reference": "docs/ASSUMPTIONS.md",
+      "reference_version": "0.1.0",
+      "reference_date": "2026-09-13",
+      "description": "Crescimento salarial nominal total fictício, incluindo inflação.",
+      "rationale": "Valor sintético de 4,5%; não adicionar inflação novamente.",
+      "responsible": "Carlos Henrique de Souza Bispo e Paulo Henrique Virgilio Cerqueira"
+    },
+    "asset_return": {
+      "kind": "synthetic",
+      "reference": "docs/ASSUMPTIONS.md",
+      "reference_version": "0.1.0",
+      "reference_date": "2026-09-13",
+      "description": "Retorno nominal total bruto de carteira fictícia, antes de taxas de administração, custos de transação e tributos; nenhum custo deduzido.",
+      "rationale": "Valor sintético de 9%; sem composição de carteira ou estimativa de mercado.",
+      "responsible": "Carlos Henrique de Souza Bispo e Paulo Henrique Virgilio Cerqueira"
+    }
+  },
+  "ruleset_id": "demo-additive",
+  "ruleset_version": "0.1.0"
+}
