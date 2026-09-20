@@ -117,7 +117,7 @@ def main():
                resultado_benchmark = %s,
                data_consulta = COALESCE(data_consulta, %s)
          WHERE fonte = 'IBGE'
-    """, ("Tábua Completa de Mortalidade 2024 (Ambos os Sexos)", resumo, date.today()))
+    """, ("Tábua Completa de Mortalidade 2024 (Ambos)", resumo, date.today()))
     conn.commit()
     cur.close()
     conn.close()
