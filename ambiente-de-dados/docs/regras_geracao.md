@@ -14,24 +14,87 @@ intencionais reproduz").
 | Data de referência | data de hoje | `DATA_REFERENCIA` no `.env` (AAAA-MM-DD) |
 | Biblioteca | Faker (pt_BR) + `random.Random` | — |
 
-**Reprodutibilidade (§6):** mesma `SEED` + mesma `DATA_REFERENCIA` = dataset
-idêntico, ids inclusive. Os UUIDs saem de `dominio.novo_uuid(rng)`, e não de
-`uuid.uuid4()`, justamente porque `uuid4` ignora a seed. Se `DATA_REFERENCIA`
-ficar vazia o gerador usa a data de hoje — reproduzir um lote antigo exige
-fixá-la.
+**Reprodutibilidade (§6):** mesma `SEED` + mesma `DATA_REFERENCIA` + mesma tábua de
+calibração = dataset idêntico, ids inclusive. Os UUIDs saem de `dominio.novo_uuid(rng)`,
+e não de `uuid.uuid4()`, justamente porque `uuid4` ignora a seed. Se `DATA_REFERENCIA`
+ficar vazia o gerador usa a data de hoje — reproduzir um lote antigo exige fixá-la. A
+tábua entra pelos arquivos versionados em `docs/referencias/`, não pela rede: nenhuma
+etapa da geração faz requisição HTTP, então nada muda debaixo do dataset entre duas
+execuções.
+
+## Calibração com dado real
+
+A **estrutura** da massa é sintética; os **parâmetros** que governam a trajetória de
+cada participante vêm de fonte pública real. Os dois blocos abaixo são distintos de
+propósito — citar o segundo como "dado calibrado" seria falso.
+
+### CALIBRADO — mortalidade por idade e sexo
+
+| Item | Valor |
+| --- | --- |
+| Fonte | IBGE — Tábua Completa de Mortalidade 2024 |
+| Arquivos | `docs/referencias/ibge_2024_homens.xlsx`, `ibge_2024_mulheres.xlsx` |
+| Cobertura | qx por idade exata, 0 a 90 anos, separado por sexo |
+| Fator de seleção | **0,85× o qx do IBGE** (ver abaixo) |
+| Onde muda | `scripts/calibracao.py` |
+
+O fator de seleção é uma premissa **declarada**, não estimada a partir de experiência
+própria: participante de fundo fechado tem mortalidade abaixo da população geral
+(renda, acesso a saúde, vínculo formal). Declará-lo explicitamente é o que impede que
+calibrar com o IBGE e validar contra o IBGE vire um teste circular — ver "Limitações".
+
+### PREMISSA — decrementos que não são mortalidade
+
+Nenhum destes foi extraído de fonte; são ordem de grandeza plausível e nada mais. As
+fontes ideais seriam AEPS/PREVIC (aposentadoria) e RAIS/CAGED (desligamento).
+
+| Decremento | Taxa anual | Nota |
+| --- | --- | --- |
+| Desligamento (saída do plano) | 3% | Saída do **plano** é mais rara que a rotatividade do emprego — quem troca de empregador frequentemente segue como autopatrocinado |
+| Aposentadoria | 30% após elegível | Elegibilidade aos 65 (M) / 62 (F) anos |
+| Invalidez (→ pensionista) | 0,2% | — |
 
 ## Distribuições amostradas
 
 - **plano_tipo**: uniforme entre BD, CD, CV
 - **submassa**: uniforme entre "Plano A", "Plano B", "Plano C"
 - **sexo**: uniforme M/F
-- **status_atual**: ativo 55%, aposentado 20%, desligado 15%, óbito 5%, pensionista 5%
-- **data_nascimento**: idade entre 20 e 70 anos na data de referência
-- **data_ingresso**: entre os 18 anos do participante e 30 dias antes da data de referência
+- **status_atual**: **não é sorteado** — emerge da simulação ano a ano (ver abaixo)
+- **data_ingresso**: uniforme nos últimos 30 anos, até 30 dias antes da data de referência
+- **data_nascimento**: derivada da idade **de entrada** (uniforme entre 18 e 55 anos) e da
+  data de ingresso. A idade *atual* não é sorteada — é consequência de quando a pessoa
+  entrou e de quanto tempo sobreviveu.
 - **cpf_sintetico**: `Faker.cpf()` — sintético, nunca CPF real
 - **valor_contribuicao**: uniforme entre R$ 200 e R$ 2.500
 - **valor_beneficio**: uniforme entre R$ 1.000 e R$ 5.000, só para aposentado/pensionista
 - **status_pagamento**: em dia 80%, atraso 15%, quitado 5%
+
+## Simulação ano a ano
+
+`status_atual` não é mais um sorteio único com peso global. Para cada participante, o
+gerador percorre um ano civil por vez, do ingresso até a data de referência, e em cada
+ano sorteia os decrementos com a taxa da **idade daquele ano**:
+
+1. **Óbito primeiro** — probabilidade `qx(idade, sexo) × fator de seleção`, onde o qx vem
+   da tábua do IBGE. Se morre, a exposição encerra ali.
+2. Se continua **ativo**, na ordem: desligamento (encerra a exposição), aposentadoria (só
+   se já elegível pela idade), invalidez.
+3. Sem saída, o ano fecha como censura e a simulação segue.
+
+Ano parcial (o de ingresso e o corrente) escala as taxas anuais pela fração de ano
+efetivamente exposta — senão quem entrou em dezembro correria o risco do ano inteiro.
+
+**Aposentadoria e invalidez mudam o estado mas não encerram a exposição**: quem se
+aposenta continua exposto ao risco de morte dentro do plano, e continua podendo morrer
+nos anos seguintes da simulação.
+
+Por que isso importa: um qx real vai de ~0,2% aos 25 anos a ~10% aos 85. Um sorteio
+único com `obito = 5%` global não tem como respeitar a idade — era a origem dos desvios
+de ordem de grandeza contra as referências externas registrados no `DATASET_CARD.md`.
+
+As linhas de `exposicao` são **subproduto** dessa simulação, não uma derivação posterior
+do status já decidido. Encaixa no desenho que já existia: `exposicao` sempre foi uma
+linha por ano civil.
 
 ## Dependências entre entidades (não amostradas)
 
@@ -45,7 +108,7 @@ fixá-la.
 - `exposicao`: uma linha por ano civil entre o ingresso e o fim da exposição.
   O fim é o desligamento/óbito para quem sai, e a data de referência para quem
   permanece no plano — inclusive aposentados e pensionistas, que continuam
-  expostos ao risco de morte.
+  expostos ao risco de morte. Essas linhas saem direto da simulação.
 - `idade_exata` é calculada de fato — `(data_base - data_nascimento) / 365.25`.
 - `contribuicao_beneficio`: até 6 competências mensais antes do fim do vínculo.
 - Um snapshot por participante (`versao_registro = 1`). Retificação bitemporal
@@ -130,6 +193,19 @@ com um agregador só.
   `R__referencia_externa.sql` é uma migration repeatable que faz
   `DELETE`+`INSERT` com tudo `NULL`, reaplicá-la depois de editar o arquivo
   apaga esses resultados — rodar os `benchmark_*.py` de novo nesse caso.
+- **Circularidade na validação A/E.** A mortalidade da massa é calibrada com a tábua do
+  IBGE. Logo, comparar o qx dessa massa contra o **mesmo** IBGE não testa realidade
+  nenhuma — testa só se a simulação reproduziu o que ela mesma recebeu como insumo. O
+  `benchmark_ibge.py` continua útil como *diagnóstico* (a simulação pegou o nível certo?),
+  mas **não** conta como validação. A validação independente é do Passo 5, contra a
+  **BR-EMS**, que é o mesmo universo demográfico brasileiro. A SOA RP-2014 é mortalidade
+  de planos de pensão americanos: resolve a circularidade, mas serve só como referência
+  internacional complementar, nunca como substituto da BR-EMS.
+- As taxas de desligamento, aposentadoria e invalidez são **premissa declarada**, não dado
+  calibrado. Só a mortalidade tem fonte real nesta rodada.
+- A calibração usa **apenas o nível** do qx, de um único ano (2024) — nenhuma tendência de
+  melhoria de mortalidade é simulada. Isso é proposital: se o gerador embutisse tendência,
+  o Passo 6 estaria detectando a própria premissa em vez de detectar um padrão.
 - Tábua biométrica (qx/lx/dx com intervalos de confiança, §2) está fora desta
   rodada.
 - O precision/recall dá 1.00 em todos os tipos porque a base sintética é limpa
