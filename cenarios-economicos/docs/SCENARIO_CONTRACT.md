@@ -8,6 +8,10 @@ Status: proposta inicial para implementação; alinhamento entre consumidores pe
 
 Responsáveis: Carlos Henrique de Souza Bispo e Paulo Henrique Virgilio Cerqueira.
 
+> Compatibilidade: este documento continua definindo o contrato `0.1.0`. O
+> [contrato de trajetória `0.2.0`](TRAJECTORY_CONTRACT.md) também é operacional;
+> o campo `contract_version` seleciona explicitamente o fluxo no mesmo endpoint.
+
 ## 1. Propósito e limites
 
 Definir entradas e saídas do gerador determinístico de cenários Base, Adverso e

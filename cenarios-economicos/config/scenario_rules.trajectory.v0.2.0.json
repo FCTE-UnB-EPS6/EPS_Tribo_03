@@ -1,0 +1,36 @@
+{
+  "ruleset_id": "demo-trajectory-rules",
+  "ruleset_version": "0.1.0",
+  "description": "Choques aditivos constantes aplicados a cada período da trajetória, exclusivamente demonstrativos.",
+  "responsible": "Equipe de cenários econômicos",
+  "reference": "docs/ASSUMPTIONS.md@0.2.0",
+  "scenarios": {
+    "base": {
+      "label": "Base",
+      "rationale": "Preservar integralmente a trajetória calibrada de entrada.",
+      "target_metric": "illustrative_only",
+      "adjustments": {
+        "inflation": 0,
+        "discount_rate": 0
+      }
+    },
+    "adverse": {
+      "label": "Adverso",
+      "rationale": "Adicionar inflação e reduzir a taxa de desconto em todos os períodos.",
+      "target_metric": "illustrative_only",
+      "adjustments": {
+        "inflation": 0.02,
+        "discount_rate": -0.02
+      }
+    },
+    "favorable": {
+      "label": "Favorável",
+      "rationale": "Reduzir inflação e elevar a taxa de desconto em todos os períodos.",
+      "target_metric": "illustrative_only",
+      "adjustments": {
+        "inflation": -0.01,
+        "discount_rate": 0.01
+      }
+    }
+  }
+}

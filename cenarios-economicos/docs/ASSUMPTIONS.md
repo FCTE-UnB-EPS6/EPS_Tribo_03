@@ -92,8 +92,9 @@ O domínio técnico adotado é taxa finita maior que `-1`, com até oito casas
 decimais, antes e depois do ajuste. Os arquivos demonstrativos satisfazem essas
 restrições. O limite de horizonte do contrato é de 1 a 120 anos.
 
-**Faixas de plausibilidade econômica ainda não estão definidas.** Não há base
-empírica selecionada para justificá-las nesta etapa. Os valores da tabela não
+**Faixas de plausibilidade econômica ainda não estão definidas no contrato
+`0.1.0`.** O artefato calibrado fornece séries empíricas, mas ainda não aprova
+limites de aceitação. Os valores da tabela não
 constituem mínimos ou máximos aceitos pelo sistema. Antes de usar premissas
 externas, documentar por variável a fonte, o período de referência, a justificativa
 dos limites e se sua violação deve gerar aviso ou rejeição. Alterações nas regras
@@ -111,8 +112,22 @@ Próximas atividades:
 
 - Preparar a demonstração no servidor de implantação; containerização validada localmente.
 - Alinhar calendário, horizonte, opcionais e métrica-alvo com os consumidores.
-- Selecionar fontes externas e critérios de plausibilidade quando houver uso além da demonstração.
+- Aprovar os mapeamentos e critérios de plausibilidade do
+  [artefato de calibração](CALIBRATION_ARTIFACT.md) antes de qualquer uso reportável.
 - Registrar o processo de revisão das premissas e as decisões entre duplas.
 
 Nenhuma das pendências de alinhamento foi considerada concluída pela criação
 destes arquivos.
+
+O artefato calibrado não altera estes arquivos demonstrativos nem transforma
+seus valores sintéticos em dados reais. A migração ocorrerá por um novo contrato
+de trajetória, mantendo a compatibilidade com a versão `0.1.0`.
+
+## Regras demonstrativas para trajetórias 0.2.0
+
+O arquivo `config/scenario_rules.trajectory.v0.2.0.json` aplica ajustes aditivos
+constantes a cada período da trajetória. Base mantém todos os valores; Adverso
+adiciona `0.02` à inflação e `-0.02` ao desconto; Favorável aplica `-0.01` e
+`0.01`, respectivamente. As regras são ilustrativas, não calibradas e não
+representam aprovação atuarial. Variáveis opcionais só podem ser usadas quando o
+ruleset declarar um ajuste para elas, inclusive zero.
