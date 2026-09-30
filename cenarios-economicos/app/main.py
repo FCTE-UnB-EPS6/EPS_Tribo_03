@@ -6,7 +6,9 @@ from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
-from app.api.schemas import INPUT, EXAMPLE, RUN, SCENARIO_LOOKUP, error_responses, success_response
+from app.api.schemas import (GENERATION_INPUT, EXAMPLE, TRAJECTORY_EXAMPLE,
+                             GENERATION_RUN, GENERATION_SCENARIO_LOOKUP,
+                             error_responses, success_response)
 from app.repositories.scenario_repository import ScenarioRepository
 from app.services.scenario_application import RulesCatalog, ScenarioApplication
 from app.services.scenario_generator import ScenarioError, loads_decimal, dumps_decimal
@@ -15,6 +17,10 @@ STATUS = {'INVALID_JSON':400, 'INVALID_REQUEST':422, 'INVALID_ASSUMPTION':422,
           'UNSUPPORTED_CONTRACT_VERSION':422, 'RULESET_NOT_FOUND':422, 'INVALID_SCENARIO':422,
           'RUN_NOT_FOUND':404, 'SCENARIO_NOT_FOUND':404, 'ASSUMPTION_VERSION_CONFLICT':409,
           'INVALID_RULESET':500, 'INTERNAL_ERROR':500, 'STORAGE_UNAVAILABLE':503,
+          'INVALID_TRAJECTORY_REQUEST':422, 'INVALID_CALIBRATION_REFERENCE':422,
+          'INVALID_TRAJECTORY':422, 'INVALID_TRAJECTORY_VALUE':422,
+          'UNSUPPORTED_TRAJECTORY_CONTRACT_VERSION':422,
+          'TRAJECTORY_VERSION_CONFLICT':409,
           'UNSUPPORTED_MEDIA_TYPE':415}
 
 
@@ -30,8 +36,8 @@ def create_app(application=None):
         rules_dir = Path(os.environ.get('ESG_RULES_DIR', Path(__file__).resolve().parents[1]/'config'))
         application = ScenarioApplication(ScenarioRepository(dsn),
                                           RulesCatalog(sorted(rules_dir.glob('scenario_rules.*.json'))))
-    api = FastAPI(title='Economic Scenario Generator', version='0.1.0',
-                  description='Cenários determinísticos. Taxas em fração decimal nominal anual. Premissas de demonstração sintéticas.')
+    api = FastAPI(title='Economic Scenario Generator', version='0.2.0',
+                  description='Cenários determinísticos para premissas escalares 0.1.0 e trajetórias calibradas 0.2.0. Taxas em fração decimal nominal anual.')
     api.state.application = application
 
     @api.exception_handler(ScenarioError)
@@ -59,8 +65,11 @@ def create_app(application=None):
               summary='Gerar e persistir três cenários', responses={
                   **error_responses(),201:{'description':'Execução persistida com snapshots e três cenários.',
                     'headers':{'Location':{'schema':{'type':'string'},'description':'URL relativa de consulta da execução.'}},
-                    'content':{'application/json':{'schema':RUN}}}},
-              openapi_extra={'requestBody':{'required':True,'content':{'application/json':{'schema':INPUT,'example':EXAMPLE}}}})
+                    'content':{'application/json':{'schema':GENERATION_RUN}}}},
+              openapi_extra={'requestBody':{'required':True,'content':{'application/json':{
+                  'schema':GENERATION_INPUT,'examples':{
+                      'contract_0_1_0':{'summary':'Premissas escalares sintéticas','value':EXAMPLE},
+                      'contract_0_2_0':{'summary':'Trajetória calibrada','value':TRAJECTORY_EXAMPLE}}}}}})
     async def generate(request: Request):
         if request.headers.get('content-type','').split(';',1)[0].strip().lower() != 'application/json':
             raise ScenarioError('UNSUPPORTED_MEDIA_TYPE',None,'Envie Content-Type: application/json.')
@@ -72,12 +81,12 @@ def create_app(application=None):
         result = await run_in_threadpool(application.generate, payload)
         return json_response(result,201,{'Location':f"/api/v1/runs/{result['run_id']}"})
 
-    @api.get('/api/v1/runs/{run_id}', response_class=Response, responses={**error_responses(),200:success_response(RUN, 'Execução persistida.')},
+    @api.get('/api/v1/runs/{run_id}', response_class=Response, responses={**error_responses(),200:success_response(GENERATION_RUN, 'Execução persistida.')},
              summary='Consultar execução e evidências')
     def get_run(run_id: str):
         return json_response(application.get_run(run_id))
 
-    @api.get('/api/v1/scenarios/{scenario_id}', response_class=Response, responses={**error_responses(),200:success_response(SCENARIO_LOOKUP, 'Cenário persistido.')},
+    @api.get('/api/v1/scenarios/{scenario_id}', response_class=Response, responses={**error_responses(),200:success_response(GENERATION_SCENARIO_LOOKUP, 'Cenário persistido.')},
              summary='Consultar cenário e execução de origem')
     def get_scenario(scenario_id: str):
         return json_response(application.get_scenario(scenario_id))

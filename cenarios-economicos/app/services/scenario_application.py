@@ -3,7 +3,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from app.services.scenario_generator import (
-    generate_scenarios, loads_decimal, validate_request, ScenarioError, fail,
+    generate_scenarios, loads_decimal, validate_generation_request, ScenarioError, fail,
 )
 
 
@@ -41,7 +41,7 @@ class ScenarioApplication:
         self.repository, self.catalog = repository, catalog
 
     def generate(self, request):
-        validate_request(request)
+        validate_generation_request(request)
         rules = self.catalog.get(request['ruleset_id'], request['ruleset_version'])
         result = generate_scenarios(request, rules)
         result['run_id'] = str(uuid4())

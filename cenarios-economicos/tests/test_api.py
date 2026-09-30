@@ -74,10 +74,13 @@ class HttpContractTests(unittest.TestCase):
         document=self.client.get('/openapi.json').json()
         endpoint=document['paths']['/api/v1/scenarios/generate']['post']
         schema=endpoint['requestBody']['content']['application/json']['schema']
-        self.assertFalse(schema['additionalProperties'])
-        self.assertIn('sources',schema['required'])
-        self.assertIn('request_snapshot',endpoint['responses']['201']['content']['application/json']['schema']['properties'])
+        self.assertEqual(len(schema['oneOf']),2)
+        self.assertEqual(schema['discriminator']['propertyName'],'contract_version')
+        self.assertEqual({item['properties']['contract_version']['const'] for item in schema['oneOf']},{'0.1.0','0.2.0'})
+        response_schema=endpoint['responses']['201']['content']['application/json']['schema']
+        self.assertEqual(len(response_schema['oneOf']),2)
         self.assertIn('Location',endpoint['responses']['201']['headers'])
+        self.assertIn('contract_0_2_0',endpoint['requestBody']['content']['application/json']['examples'])
         self.assertEqual(self.client.get('/docs').status_code,200)
 
     def test_factory_requires_connection_configuration(self):
@@ -102,8 +105,11 @@ class HttpPersistenceTests(unittest.TestCase):
         from app.main import create_app
         from app.services.scenario_application import ScenarioApplication,RulesCatalog
         with self.repo.connect() as conn:
-            conn.execute('TRUNCATE economic_scenarios.scenario, economic_scenarios.run, economic_scenarios.assumption_set, economic_scenarios.ruleset')
-        self.application=ScenarioApplication(self.repo,RulesCatalog([ROOT/'config/scenario_rules.demo.v0.1.0.json']))
+            conn.execute('TRUNCATE economic_scenarios.scenario, economic_scenarios.run, economic_scenarios.assumption_set, economic_scenarios.trajectory_set, economic_scenarios.ruleset')
+        self.application=ScenarioApplication(self.repo,RulesCatalog([
+            ROOT/'config/scenario_rules.demo.v0.1.0.json',
+            ROOT/'config/scenario_rules.trajectory.v0.2.0.json',
+        ]))
         self.client=TestClient(create_app(self.application),raise_server_exceptions=False)
         self.addCleanup(self.client.close)
         self.request=loads_decimal((ROOT/'examples/generate.demo.v0.1.0.json').read_text())
@@ -125,6 +131,15 @@ class HttpPersistenceTests(unittest.TestCase):
             self.assertEqual(queried.status_code,200)
             self.assertEqual(loads_decimal(queried.text),{'run_id':result['run_id'],'scenario':scenario})
         self.assertEqual(self.repo.get_run(result['run_id']),result)
+
+    def test_generate_trajectory_v02_over_http(self):
+        self.request=loads_decimal((ROOT/'examples/trajectory.demo.v0.2.0.json').read_text())
+        response=self.post()
+        self.assertEqual(response.status_code,201,response.text)
+        result=loads_decimal(response.text)
+        self.assertEqual(result['contract_version'],'0.2.0')
+        self.assertEqual(result['scenarios'][0]['trajectory_id'],'demo-market-trajectory')
+        self.assertEqual(loads_decimal(self.client.get(response.headers['location']).text),result)
 
     def test_repeated_post_and_conflict(self):
         first,second=self.post(),self.post()

@@ -1,0 +1,55 @@
+{
+  "fixture_schema_version": "1.0.0",
+  "fixture_set_id": "economic-public-data-2024-v1",
+  "created_at": "2026-09-22T13:08:31Z",
+  "purpose": "Deterministic offline contract tests with records collected from external providers.",
+  "sources": [
+    {
+      "id": "bacen-sgs-ipca-2024",
+      "path": "bacen/ipca_2024.json",
+      "format": "json",
+      "byte_count": 447,
+      "sha256": "204eec2b81cd5a20759fb45eb791e39a4763fed59df03bb30e79fcb6a2cbab01",
+      "record_count": 12,
+      "requested_period": {
+        "start": "2024-01-01",
+        "end": "2024-12-31"
+      },
+      "collected_at": "2026-09-22T13:07:42.437988Z",
+      "collector": "cenarios-economicos.app.data_sources.bacen@0.1.0",
+      "provider": "Banco Central do Brasil - Sistema Gerenciador de Series Temporais",
+      "request_url": "https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json&dataInicial=01%2F01%2F2024&dataFinal=31%2F12%2F2024",
+      "upstream_sha256": "c7c681ec890b126300f58facb801368ec741ec0f976afb7afd9109ffcd62c052",
+      "repository_canonicalization": "A single LF was appended after the upstream JSON document; records and values were not changed."
+    },
+    {
+      "id": "ibovespa-yahoo-2024-sample",
+      "path": "ibovespa/ibovespa_2024.csv",
+      "format": "csv",
+      "byte_count": 362,
+      "sha256": "f6bb9c81aa391d962710cc258b70db1c494e696de96ce7d941429357bf6e905e",
+      "record_count": 5,
+      "requested_period": {
+        "start": "2024-01-01",
+        "end": "2024-12-31"
+      },
+      "observed_period": {
+        "start": "2024-01-02",
+        "end": "2024-01-08"
+      },
+      "collected_at": "2026-09-22T13:08:31.816590Z",
+      "collector": "cenarios-economicos.app.data_sources.ibovespa@0.1.0",
+      "provider": "Yahoo Finance via yfinance 1.7.0 and pandas 3.0.6",
+      "instrument": "^BVSP",
+      "is_official_b3_source": false,
+      "derivation": "First five ordered observations from the provider extract collected for calendar year 2024; no prices were recalculated.",
+      "notice": "Yahoo Finance and yfinance are not official B3 sources."
+    }
+  ],
+  "experimental_sources_without_fixture": [
+    {
+      "id": "anbima-ettj",
+      "reason": "The live response observed on 2026-09-22 did not satisfy the spike contract for reference date 2024-12-30. No invalid response was promoted to a fixture."
+    }
+  ]
+}

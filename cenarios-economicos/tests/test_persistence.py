@@ -34,13 +34,19 @@ class PersistenceTests(unittest.TestCase):
 
     def setUp(self):
         with self.repo.connect() as conn:
-            conn.execute('TRUNCATE economic_scenarios.scenario, economic_scenarios.run, economic_scenarios.assumption_set, economic_scenarios.ruleset')
+            conn.execute('TRUNCATE economic_scenarios.scenario, economic_scenarios.run, economic_scenarios.assumption_set, economic_scenarios.trajectory_set, economic_scenarios.ruleset')
         self.request = loads_decimal((ROOT/'examples/generate.demo.v0.1.0.json').read_text())
 
     def counts(self):
         with self.repo.connect() as conn:
             return tuple(conn.execute('SELECT count(*) FROM economic_scenarios.' + table).fetchone()[0]
                          for table in ('assumption_set','ruleset','run','scenario'))
+
+    def trajectory_count(self):
+        with self.repo.connect() as conn:
+            return conn.execute(
+                'SELECT count(*) FROM economic_scenarios.trajectory_set'
+            ).fetchone()[0]
 
     def test_roundtrip_and_new_repository(self):
         from app.repositories.scenario_repository import ScenarioRepository
@@ -90,6 +96,26 @@ class PersistenceTests(unittest.TestCase):
         self.request['assumptions']['inflation']=Decimal('0.05')
         self.application.generate(self.request)
         self.assertEqual(self.counts(),(2,1,2,6))
+
+    def test_trajectory_contract_roundtrip_and_version_conflict(self):
+        from app.services.scenario_application import RulesCatalog, ScenarioApplication
+        application = ScenarioApplication(
+            self.repo,
+            RulesCatalog([ROOT / 'config/scenario_rules.trajectory.v0.2.0.json']),
+        )
+        request = loads_decimal(
+            (ROOT / 'examples/trajectory.demo.v0.2.0.json').read_text()
+        )
+        result = application.generate(request)
+        self.assertEqual(result['contract_version'], '0.2.0')
+        self.assertEqual(self.repo.get_run(result['run_id']), result)
+        self.assertEqual(self.counts(), (0,1,1,3))
+        self.assertEqual(self.trajectory_count(), 1)
+        request['trajectory']['periods'][0]['variables']['inflation']['value'] = Decimal('0.05')
+        with self.assertRaises(ScenarioError) as caught:
+            application.generate(request)
+        self.assertEqual(caught.exception.code, 'TRAJECTORY_VERSION_CONFLICT')
+        self.assertEqual(self.counts(), (0,1,1,3))
 
     def test_rules_conflict_rolls_back_new_assumptions(self):
         from app.services.scenario_application import RulesCatalog,ScenarioApplication
@@ -145,9 +171,17 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(self.counts(),(1,1,1,3))
 
     def test_immutable_tables_and_idempotent_migration(self):
+        from app.services.scenario_application import RulesCatalog, ScenarioApplication
         result=self.application.generate(self.request)
+        trajectory_application = ScenarioApplication(
+            self.repo,
+            RulesCatalog([ROOT / 'config/scenario_rules.trajectory.v0.2.0.json']),
+        )
+        trajectory_application.generate(
+            loads_decimal((ROOT / 'examples/trajectory.demo.v0.2.0.json').read_text())
+        )
         self.repo.initialize()
-        for table in ('run','scenario','assumption_set','ruleset'):
+        for table in ('run','scenario','assumption_set','trajectory_set','ruleset'):
             for sql in ('UPDATE economic_scenarios.'+table+' SET content=content',
                         'DELETE FROM economic_scenarios.'+table):
                 with self.assertRaises(self.psycopg.Error):

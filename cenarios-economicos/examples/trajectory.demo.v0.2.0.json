@@ -1,0 +1,96 @@
+{
+  "contract_version": "0.2.0",
+  "purpose": "projection",
+  "base_date": "2026-01-01",
+  "horizon_years": 2,
+  "unit": "annual_decimal",
+  "rate_basis": "nominal",
+  "ruleset_id": "demo-trajectory-rules",
+  "ruleset_version": "0.1.0",
+  "calibration": {
+    "artifact_id": "demo-calibration@1.0.0",
+    "calibration_id": "demo-calibration",
+    "calibration_version": "1.0.0",
+    "artifact_schema_version": "1.0.0",
+    "transformation_policy_version": "0.1.0",
+    "cutoff_date": "2025-12-31",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "scope": "historical_and_market_implied"
+  },
+  "trajectory": {
+    "trajectory_id": "demo-market-trajectory",
+    "trajectory_version": "0.1.0",
+    "periods": [
+      {
+        "period": 1,
+        "period_start": "2026-01-01",
+        "period_end": "2027-01-01",
+        "variables": {
+          "inflation": {
+            "value": 0.04761905,
+            "status": "market_implied",
+            "measure": "forward_rate",
+            "source_metric": "ettj_implied_inflation_forward",
+            "method": "fisher_forward",
+            "source": {
+              "kind": "calibration_artifact",
+              "reference": "demo-calibration@1.0.0",
+              "reference_version": "1.0.0",
+              "reference_date": "2025-12-30",
+              "path": "/market_curve/annual_forwards/0/implied_inflation"
+            }
+          },
+          "discount_rate": {
+            "value": 0.10000000,
+            "status": "market_implied",
+            "measure": "forward_rate",
+            "source_metric": "ettj_nominal_forward",
+            "method": "log_discount_factor_interpolation",
+            "source": {
+              "kind": "calibration_artifact",
+              "reference": "demo-calibration@1.0.0",
+              "reference_version": "1.0.0",
+              "reference_date": "2025-12-30",
+              "path": "/market_curve/annual_forwards/0/nominal_rate"
+            }
+          }
+        }
+      },
+      {
+        "period": 2,
+        "period_start": "2027-01-01",
+        "period_end": "2028-01-01",
+        "variables": {
+          "inflation": {
+            "value": 0.05000000,
+            "status": "modeled",
+            "measure": "modeled_rate",
+            "source_metric": "inflation_convergence_model",
+            "method": "illustrative_convergence",
+            "source": {
+              "kind": "model",
+              "reference": "demo-inflation-model",
+              "reference_version": "0.1.0",
+              "reference_date": "2025-12-31",
+              "path": "/periods/1/inflation"
+            }
+          },
+          "discount_rate": {
+            "value": 0.09500000,
+            "status": "modeled",
+            "measure": "modeled_rate",
+            "source_metric": "discount_convergence_model",
+            "method": "illustrative_convergence",
+            "source": {
+              "kind": "model",
+              "reference": "demo-discount-model",
+              "reference_version": "0.1.0",
+              "reference_date": "2025-12-31",
+              "path": "/periods/1/discount_rate"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

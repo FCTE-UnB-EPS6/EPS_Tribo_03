@@ -5,6 +5,36 @@ e persistência PostgreSQL. O núcleo usa apenas a biblioteca padrão; a API usa
 FastAPI/Uvicorn e a persistência usa Psycopg, listados em `requirements.txt`. Gera Base, Adverso e Favorável a partir das premissas
 e regras versionadas. As configurações fornecidas são exclusivamente sintéticas.
 
+## Contrato de trajetória 0.2.0
+
+A Fase 7 integrou ao gerador, OpenAPI e PostgreSQL o contrato de trajetórias
+anuais variáveis criado na Fase 6, preservando integralmente o fluxo `0.1.0`.
+O validador, o exemplo e as regras de projeção, backtest e proveniência estão descritos em
+[Contrato de trajetória econômica](docs/TRAJECTORY_CONTRACT.md).
+
+O endpoint de geração aceita `0.1.0` ou `0.2.0` conforme o campo
+`contract_version`. Para executar a trajetória demonstrativa pela CLI:
+
+```bash
+python -m app generate examples/trajectory.demo.v0.2.0.json
+```
+
+O catálogo inclui regras demonstrativas separadas para a trajetória em
+`config/scenario_rules.trajectory.v0.2.0.json`.
+Detalhes do despacho, formato de saída, migração e validação estão em
+[Integração do contrato 0.2.0](docs/PHASE7_INTEGRATION.md).
+
+## Fixtures reais e testes ao vivo
+
+A Fase 8 adiciona um conjunto pequeno e versionado de registros reais do
+IPCA/SGS e do extrato do Ibovespa, com hashes e proveniência verificáveis. Esses
+dados são usados somente por testes offline determinísticos. Integrações de rede
+existem em uma suíte separada e exigem `ESG_RUN_LIVE_DATA_TESTS=1`.
+
+Política de atualização, comandos, limitações e o drift observado na ANBIMA
+estão documentados em
+[Fixtures reais e integrações ao vivo](docs/PHASE8_REAL_DATA_TESTS.md).
+
 ## Executar com Docker Compose
 
 Na raiz do repositório:
@@ -96,6 +126,75 @@ rules = loads_decimal(Path("config/scenario_rules.demo.v0.1.0.json").read_text()
 result = generate_scenarios(request, rules)
 print(dumps_decimal(result))
 ```
+
+## Coletar dados brutos do Bacen
+
+O coletor do SGS é executado separadamente do núcleo de geração e preserva as
+respostas brutas com manifesto, hashes e metadados das requisições:
+
+```bash
+python3 scripts/collect_bacen.py --start 2015-01-01 --output data/raw/bacen
+```
+
+Esta etapa ainda não transforma as séries em premissas ou trajetórias. Formato,
+séries disponíveis, garantias de atomicidade e limites estão descritos em
+[Coleta de dados brutos do Bacen](docs/BACEN_COLLECTION.md).
+
+## Spike da ETTJ da ANBIMA
+
+A viabilidade da coleta da curva a termo foi investigada separadamente, sem
+adicionar dependencias ao runtime nem integrar uma fonte ainda nao promovida ao
+nucleo. O prototipo preserva o XML bruto, gera manifesto e possui testes offline.
+Resultados, riscos e comando de execucao estao em
+[Spike ANBIMA ETTJ](spikes/anbima_ettj/README.md).
+
+## Coletar Ibovespa
+
+O historico diario do ticker `^BVSP` pode ser preservado como extrato auditavel:
+
+```bash
+python3 -m pip install -r requirements-data.txt
+python3 scripts/collect_ibovespa.py \
+  --start 2015-01-01 \
+  --output data/raw/ibovespa
+```
+
+Esta integracao usa Yahoo Finance por meio do cliente terceiro `yfinance`; nao e
+uma API oficial nem uma fonte oficial da B3. A cadeia de proveniencia, os termos
+de uso, os parametros sem ajuste implicito e a diferenca entre extrato do
+provedor e dado bruto estao descritos em
+[Coleta do Ibovespa por yfinance](docs/IBOVESPA_COLLECTION.md).
+
+## Transformacoes de frequencia
+
+As regras para compor Selic, CDI, IPCA e IGP-M, calcular variacoes de niveis de
+cambio e Ibovespa e obter taxas forward da ETTJ estao definidas em
+[Politica de transformacoes de frequencia](docs/FREQUENCY_TRANSFORMATIONS.md).
+A politica tambem fixa periodos completos, calendario, tratamento de ausencias,
+precisao, proveniencia e a distincao entre valores observados, implicitos e
+modelados. Ela e aplicada pelo artefato de calibracao, sem alterar nem alimentar
+automaticamente o gerador `0.1.0`.
+
+## Construir o artefato de calibracao
+
+O builder offline verifica os hashes dos snapshots, aplica a politica de
+frequencia e publica `calibration.json` com manifesto proprio:
+
+```bash
+python3 scripts/build_calibration.py \
+  --bacen-snapshot data/raw/bacen/ID_DO_SNAPSHOT \
+  --ibovespa-snapshot data/raw/ibovespa/ID_DO_SNAPSHOT \
+  --cutoff 2025-12-31 \
+  --calibration-id tribo3-base \
+  --calibration-version 1.0.0 \
+  --responsible "Equipe de cenarios economicos"
+```
+
+Uma curva produzida pelo spike da ANBIMA pode ser adicionada somente com
+`--anbima-snapshot` e `--allow-experimental-anbima`. Estrutura, garantias,
+versionamento e limites estao descritos em
+[Artefato versionado de calibracao](docs/CALIBRATION_ARTIFACT.md).
+O resultado ainda nao e entrada do contrato `0.1.0`.
 
 Use `loads_decimal` para preservar os números fracionários do JSON. Na chamada
 Python direta, taxas e ajustes aceitam `Decimal` ou `int`, nunca `float`, strings

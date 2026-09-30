@@ -203,6 +203,10 @@ def generate_scenarios(request, rules):
     A camada futura de aplicação acrescentará IDs, horário e status apenas após
     persistência. Esta função não representa uma resposta HTTP de execução salva.
     """
+    if isinstance(request, dict) and request.get("contract_version") == "0.2.0":
+        from app.services.trajectory_generator import generate_trajectory_scenarios
+
+        return generate_trajectory_scenarios(request, rules)
     start, horizon, rates = validate_request(request)
     adjusted = validate_rules(rules, request, rates)
     scenarios = []
@@ -217,3 +221,23 @@ def generate_scenarios(request, rules):
     return {"contract_version": CONTRACT_VERSION, "generator_version": GENERATOR_VERSION,
             "request_snapshot": deepcopy(request), "ruleset_snapshot": deepcopy(rules),
             "scenarios": scenarios}
+
+
+def validate_generation_request(request):
+    """Valida a versão declarada sem selecionar implicitamente a mais recente."""
+    if not isinstance(request, dict):
+        fail("INVALID_REQUEST", None, "Esperado objeto.")
+    contract_version = request.get("contract_version")
+    if contract_version == CONTRACT_VERSION:
+        validate_request(request)
+        return
+    if contract_version == "0.2.0":
+        from app.services.trajectory_generator import validate_trajectory
+
+        validate_trajectory(request)
+        return
+    fail(
+        "UNSUPPORTED_CONTRACT_VERSION",
+        "contract_version",
+        "Versão de contrato não suportada.",
+    )
