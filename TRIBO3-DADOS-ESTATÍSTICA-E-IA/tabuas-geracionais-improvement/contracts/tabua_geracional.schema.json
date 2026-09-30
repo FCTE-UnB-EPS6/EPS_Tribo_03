@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tribo3.eps6/schemas/tabua_geracional.schema.json",
+  "title": "Tábua Geracional Dinâmica — Passo 6",
+  "description": "Uma linha por (ano_calendario, idade): qx projetado pelo modelo campeão (Baseline ou Lee-Carter), ancorado na tábua própria do Passo 5. Gerado por scripts/projecao/tabua_geracional.py, colunas confirmadas contra um CSV real (docs/tabua_geracional/tabua_geracional_*.csv) -- não é um schema especulativo.",
+  "type": "object",
+  "properties": {
+    "ano_calendario": {
+      "type": "integer",
+      "description": "Ano civil da projeção, a partir do ano base (último ano com dado histórico).",
+      "minimum": 1900
+    },
+    "idade": {
+      "type": "integer",
+      "description": "Idade exata em anos completos na data-base da projeção.",
+      "minimum": 0,
+      "maximum": 130
+    },
+    "coorte_nascimento": {
+      "type": "integer",
+      "description": "Ano de nascimento implícito: ano_calendario - idade. Identifica a geração, não é campo sorteado."
+    },
+    "qx_projetado": {
+      "type": "number",
+      "description": "Probabilidade de morte no ano, sob o modelo campeão, ancorada na tábua do Passo 5 no ano base.",
+      "exclusiveMinimum": 0,
+      "maximum": 0.999
+    },
+    "improvement_anual_pct": {
+      "type": "number",
+      "description": "Taxa de melhoria anual equivalente (%) entre o ano base e este ano_calendario. Sempre 0.0 no próprio ano base (h=0, não há intervalo para anualizar)."
+    },
+    "improvement_acumulado_pct": {
+      "type": "number",
+      "description": "Queda percentual acumulada de qx_projetado em relação ao ano base para esta idade. Pode ser negativo (piora) -- confirmado em dado real: idades jovens no ano base já saem levemente negativas por ruído de calibração, não é um valor sempre positivo por construção."
+    },
+    "modelo_origem": {
+      "type": "string",
+      "enum": ["Baseline", "Lee-Carter"],
+      "description": "Modelo campeão do backtest temporal (backtest/backtest_temporal.py) -- o mesmo em toda a tábua, decidido uma vez por execução, nunca varia linha a linha."
+    }
+  },
+  "required": [
+    "ano_calendario", "idade", "coorte_nascimento", "qx_projetado",
+    "improvement_anual_pct", "improvement_acumulado_pct", "modelo_origem"
+  ],
+  "additionalProperties": false
+}
