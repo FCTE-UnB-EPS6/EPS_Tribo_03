@@ -16,10 +16,11 @@ Antes de gravar como "oficial", roda dois portões de qualidade (reaproveita
 os módulos já existentes, não recalcula nada do zero):
 
     1. Aderência: a mesma bateria de teste_aderencia.py (qui-quadrado geral).
-    2. A/E: a mesma comparação de comparacao_ae.py contra o IBGE (categoria
-       "Ambos"), com uma faixa de sanidade frouxa (0.5x-2x) — não é um
-       critério estatístico formal, é só pra pegar um desvio grosseiro
-       antes de oficializar.
+    2. A/E: a mesma comparação de comparacao_ae.py contra a BR-EMS,
+    referência principal e independente, agregando M+F, com uma faixa
+    de sanidade frouxa (0.5x-2x) — não é um critério estatístico formal,
+    é só pra pegar um desvio grosseiro antes de oficializar.
+
 
 Se algum portão falhar, a tábua ainda é gravada (pra não travar o Passo 6),
 mas o relatório marca claramente que precisa de revisão antes de
@@ -41,7 +42,14 @@ from suavizacao import suavizar_por_submassa
 from credibility import calcular_credibility
 from intervalos_confianca import calcular_ics
 from teste_aderencia import montar_celulas, qui_quadrado, ALPHA as ALPHA_ADERENCIA
-from comparacao_ae import carregar_ibge, ARQUIVOS_IBGE, carregar_taxas_brutas_por_sexo, calcular_ae
+from comparacao_ae import (
+    carregar_ibge,
+    carregar_brems,
+    ARQUIVOS_IBGE,
+    ABAS_BREMS,
+    carregar_taxas_brutas_por_sexo,
+    calcular_ae,
+)
 
 PASTA_SAIDA = Path(__file__).resolve().parent.parent / "docs" / "tabua_propria"
 
@@ -109,29 +117,61 @@ def gate_aderencia(brutas):
              f"{'OK, aderência plausível' if passou else 'REVISAR: aderência rejeitada'}")
     return passou, texto
 
-
 def gate_ae(cur):
-    """Reaproveita comparacao_ae.py: razão A/E geral da categoria 'Ambos'."""
-    ibge_por_categoria = {cat: carregar_ibge(arq) for cat, arq in ARQUIVOS_IBGE.items()}
+    """Gate A/E usando BR-EMS como referência principal.
+
+    O IBGE é mantido apenas como diagnóstico em comparacao_ae.py.
+    Como a BR-EMS não publica tábua combinada para ambos os sexos,
+    o A/E geral é calculado agregando as células M e F.
+    """
+    brems_por_sexo = {
+        sexo: carregar_brems(aba)
+        for sexo, aba in ABAS_BREMS.items()
+    }
+    ibge_por_categoria = {
+        cat: carregar_ibge(arq)
+        for cat, arq in ARQUIVOS_IBGE.items()
+    }
+
     brutas_por_sexo = carregar_taxas_brutas_por_sexo(cur)
     if not brutas_por_sexo:
-        return None, "A/E não calculável (sem exposição por sexo)"
+        return None, "A/E BR-EMS não calculável (sem exposição por sexo)"
 
-    linhas_ae = calcular_ae(brutas_por_sexo, ibge_por_categoria)
-    ambos = [l for l in linhas_ae if l["categoria"] == "Ambos"]
-    if not ambos:
-        return None, "A/E não calculável (sem idade em comum com a tábua IBGE)"
+    linhas_ae = calcular_ae(
+        brutas_por_sexo,
+        brems_por_sexo,
+        ibge_por_categoria,
+    )
 
-    atual_total = sum(l["obitos_atual"] for l in ambos)
-    esperado_total = sum(l["obitos_esperado"] for l in ambos)
+    celulas_brems = [
+        linha
+        for linha in linhas_ae
+        if linha["categoria"] in ("M", "F")
+        and linha["obitos_esperado_brems"] is not None
+    ]
+
+    if not celulas_brems:
+        return None, "A/E BR-EMS não calculável (sem idade em comum com a BR-EMS)"
+
+    obitos_total = sum(linha["obitos_atual"] for linha in celulas_brems)
+    esperado_total = sum(
+        linha["obitos_esperado_brems"]
+        for linha in celulas_brems
+    )
+
     if esperado_total <= 0:
-        return None, "A/E não calculável (esperado total zero)"
+        return None, "A/E BR-EMS não calculável (esperado total zero)"
 
-    razao = atual_total / esperado_total
+    razao = obitos_total / esperado_total
     minimo, maximo = AE_FAIXA_ACEITAVEL
     passou = minimo <= razao <= maximo
-    texto = (f"razão A/E geral (Ambos) = {razao:.3f} (faixa aceitável "
-             f"{minimo}x-{maximo}x) -> {'OK' if passou else 'REVISAR: fora da faixa de sanidade'}")
+
+    texto = (
+        f"razão A/E geral (BR-EMS, M+F) = {razao:.3f} "
+        f"(faixa aceitável {minimo}x-{maximo}x) -> "
+        f"{'OK' if passou else 'REVISAR: fora da faixa de sanidade'}"
+    )
+
     return passou, texto
 
 
@@ -149,7 +189,7 @@ def montar_relatorio(linhas, gate_aderencia_resultado, gate_ae_resultado):
         "",
         "## Portões de qualidade",
         f"- Teste de aderência: {texto_aderencia}",
-        f"- Comparação A/E (IBGE): {texto_ae}",
+        f"- Comparação A/E (BR-EMS — referência principal): {texto_ae}",
         "",
         f"## Veredito: {'PRONTA PARA OFICIALIZAR' if pronta else 'REVISAR ANTES DE OFICIALIZAR'}",
         "",
