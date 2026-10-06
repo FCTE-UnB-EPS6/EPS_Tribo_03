@@ -302,7 +302,8 @@ def gerar_alertas(params, idade_minima=IDADE_MINIMA_MONOTONIA,
             "detalhe": (
                 f"kappa_t variou {s['variacao']:+.3f} de {s['de']} para {s['para']} "
                 f"(limite {s['limite']:.3f} = {FATOR_SALTO_KAPPA:g} x |drift|). "
-                "Possível quebra na série; avisar a dupla do Passo 6."
+                "Possível quebra na série de dados de origem; projeções que usam "
+                "esses anos podem estar distorcidas."
             ),
         })
 
@@ -313,8 +314,7 @@ def gerar_alertas(params, idade_minima=IDADE_MINIMA_MONOTONIA,
             "tipo": "beta_negativo",
             "detalhe": (
                 f"beta_x negativo nas idades {idades[beta < 0].tolist()[:10]}: com kappa_t "
-                "caindo, o modelo projeta mortalidade SUBINDO nessas idades. "
-                "Avisar a dupla do Passo 6."
+                "caindo, o modelo projeta mortalidade SUBINDO nessas idades."
             ),
         })
 

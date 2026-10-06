@@ -8,7 +8,7 @@ Detalhes e números no [model card, seção 6](model_card_lee_carter.md#6-model-
 
 | # | Achado | Impacto possível | Quem precisa saber |
 |---|---|---|---|
-| MR1 | Salto do kappa_t em 2022 (+6,27) e volta em 2023 (−4,29) | Se for quebra de série, o modelo mistura duas metodologias de tábua | Dupla do Passo 6 |
+| MR1 | Salto do kappa_t em 2022 (+6,27) e volta em 2023 (−4,29). O salto já está no CSV do IBGE extraído pelo Passo 1 | Se for quebra de série, o modelo mistura duas metodologias de tábua | Duplas do Passo 1 e do Passo 6 |
 | MR2 | Drift calculado só pelos extremos (−0,575) contra a reta ajustada a todos os anos (−0,404) | Projeção de 30 anos com queda de mortalidade possivelmente exagerada. Para fundo de pensão isso tende a **superestimar o passivo** (lado conservador); para produtos com pagamento por morte, o efeito é o inverso. Em qualquer caso, a projeção depende de só 2 pontos da série | Dupla do Passo 6; SL-08 (CVaR) |
 | MR3 | Anos de COVID (2020-2021) sem alta de mortalidade | Indica que a série pode ser de tábuas projetadas e não observadas; choques reais ficam invisíveis | Dupla do Passo 6 / Passo 1 |
 | MR4 | Variância explicada pelo 1º componente = 76% | Cerca de um quarto da variação da série não é capturado pela forma "uma tendência só para todas as idades" | Registro |
@@ -37,5 +37,5 @@ A análise de vieses por subgrupo (sexo, plano, submassa) entra na **Etapa 3** (
 ## 4. O que fica para depois
 
 - Etapa 2 (Passo 5) e Etapa 3 (Passo 2), quando os modelos de origem estiverem prontos.
-- Resposta da dupla do Passo 6 sobre MR1, MR2 e MR3.
+- Resposta das duplas do Passo 1 (MR1, MR3) e do Passo 6 (MR1, MR2).
 - Limite de tempo de execução (RNF02), a definir com base nas rodadas registradas.
