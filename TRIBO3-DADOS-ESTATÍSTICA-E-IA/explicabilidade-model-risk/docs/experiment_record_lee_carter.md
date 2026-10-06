@@ -59,3 +59,4 @@
 
 - Primeira rodada da Etapa 1. Os alertas de model risk estão descritos no [model card](model_card_lee_carter.md#6-model-risk-alertas-não-bloqueiam-mas-precisam-de-resposta).
 - O limite de tempo de execução (RNF02) será definido a partir desta medição.
+- **Antes de preencher esta rodada:** o script mudou depois do teste de 05/10 (decisões D8 a D11: checagem `estrutura_consistente` no lugar de `q_entre_0_e_1`, alerta `beta_negativo`, novo controle de alterações locais). Rode de novo com o código atual e confira os números acima contra o JSON novo, em especial a contagem de alertas.

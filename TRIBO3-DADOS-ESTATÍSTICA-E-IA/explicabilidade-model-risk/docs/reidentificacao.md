@@ -9,7 +9,7 @@
 |---|---|
 | Há dado pessoal? | **Não.** A entrada é a série do IBGE 2015-2024, pública e agregada por idade simples e ano. |
 | Há registro individual em algum ponto? | Não. O contrato do Passo 6 entrega só parâmetros do modelo (alpha_x, beta_x, kappa_t, drift). |
-| As saídas (JSON e PNG) têm linhas individuais? | Não. Só parâmetros, efeitos médios (ALE), contribuições por célula idade × ano (SHAP) e checagens. |
+| As saídas (JSON e PNG) têm linhas individuais? | Não. O JSON traz parâmetros, efeitos médios (ALE), resumo do SHAP (valor base e importância média) e checagens. As contribuições SHAP por célula idade × ano aparecem só no gráfico `shap_dependencia.png`, e cada célula agrega uma população inteira. |
 | Combinações raras de variáveis? | Não se aplica: as únicas entradas são idade e ano, e cada célula agrega a população brasileira daquela idade. |
 | **Risco de reidentificação** | **Baixo.** |
 

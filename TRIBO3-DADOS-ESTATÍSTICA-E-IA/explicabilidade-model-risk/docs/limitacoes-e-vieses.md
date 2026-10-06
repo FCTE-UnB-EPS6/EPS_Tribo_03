@@ -9,17 +9,21 @@ Detalhes e números no [model card, seção 6](model_card_lee_carter.md#6-model-
 | # | Achado | Impacto possível | Quem precisa saber |
 |---|---|---|---|
 | MR1 | Salto do kappa_t em 2022 (+6,27) e volta em 2023 (−4,29) | Se for quebra de série, o modelo mistura duas metodologias de tábua | Dupla do Passo 6 |
-| MR2 | Drift calculado só pelos extremos (−0,575) contra a reta ajustada a todos os anos (−0,404) | Projeção de 30 anos com queda de mortalidade possivelmente exagerada, o que pode **subestimar o passivo** | Dupla do Passo 6; SL-08 (CVaR) |
+| MR2 | Drift calculado só pelos extremos (−0,575) contra a reta ajustada a todos os anos (−0,404) | Projeção de 30 anos com queda de mortalidade possivelmente exagerada. Para fundo de pensão isso tende a **superestimar o passivo** (lado conservador); para produtos com pagamento por morte, o efeito é o inverso. Em qualquer caso, a projeção depende de só 2 pontos da série | Dupla do Passo 6; SL-08 (CVaR) |
 | MR3 | Anos de COVID (2020-2021) sem alta de mortalidade | Indica que a série pode ser de tábuas projetadas e não observadas; choques reais ficam invisíveis | Dupla do Passo 6 / Passo 1 |
 | MR4 | Variância explicada pelo 1º componente = 76% | Cerca de um quarto da variação da série não é capturado pela forma "uma tendência só para todas as idades" | Registro |
 
 ## 2. Limitações da explicação
 
+- **O Lee-Carter não é o modelo de produção do Passo 6.** O campeão do backtest é o Baseline; o contrato entrega o Lee-Carter por ser a decomposição interpretável. A explicação descreve o padrão de mortalidade, não o número exato da tábua de produção.
+- **Anos históricos usam o kappa_t ajustado de cada ano**, e não o kappa do último ano como faz `projetar_lee_carter` no Passo 6 ([decisões, D5](decisoes.md)). Na projeção, as duas fórmulas são idênticas.
 - **A explicação só é tão boa quanto o modelo de origem.** Erros nos dados ou no ajuste do Passo 6 aparecem aqui, mas são corrigidos lá.
 - **Série curta:** 10 anos (2015-2024). Qualquer tendência estimada tem muita incerteza.
 - **Projeção sem incerteza nesta etapa:** o q projetado usa kappa_T + h × drift, sem simular choques. Intervalos e risco de cauda (CVaR) são escopo da SL-08.
 - **Faixa de idades:** só 20 a 70 anos. Nada se pode dizer sobre idades fora dessa faixa, justamente as mais relevantes para aposentados muito idosos.
 - **ALE e SHAP com entradas fixas:** idade e ano são as únicas entradas; a explicação não diz nada sobre *causas* da mortalidade.
+- **ALE ≈ PDP nesta etapa:** a grade idade × ano é completa, então as entradas são independentes e o ALE não tem vantagem sobre o PDP aqui.
+- **Importância SHAP pesada pela projeção:** 30 dos 40 anos analisados são projetados, então o peso do "ano" reflete sobretudo o drift.
 
 ## 3. Vieses por subgrupo
 

@@ -33,7 +33,7 @@ O Lee-Carter descreve a mortalidade de cada idade *x* em cada ano *t* assim:
 O script `scripts/explicar_lee_carter.py`:
 
 1. lê alpha_x, beta_x, kappa_t e drift pelo contrato do Passo 6, `obter_parametros_para_passo7()`, sem alterá-lo;
-2. recalcula q(x,t) com a mesma fórmula do Passo 6 para 2015-2024 (histórico) e 2025-2054 (projeção de 30 anos);
+2. recalcula q(x,t) com a fórmula do Passo 6 para 2015-2024 (histórico, com o kappa_t ajustado de cada ano) e 2025-2054 (projeção de 30 anos, idêntica ao Passo 6);
 3. faz **checagens de plausibilidade**: se alguma falhar, a explicação **não é publicada** (status `BLOQUEADO`);
 4. gera **alertas de model risk**, que não bloqueiam mas ficam registrados;
 5. calcula o **ALE** (efeito médio de idade e de ano sobre q) e o **SHAP** (quanto idade e ano contribuem para cada q);
@@ -53,6 +53,15 @@ source venv/bin/activate
 pip install -r <repositorio>/TRIBO3-DADOS-ESTATÍSTICA-E-IA/explicabilidade-model-risk/requirements.txt
 ```
 
+No Windows (PowerShell):
+
+```powershell
+cd C:\caminho\para\fora\do\repositorio
+py -3.12 -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r <repositorio>\TRIBO3-DADOS-ESTATÍSTICA-E-IA\explicabilidade-model-risk\requirements.txt
+```
+
 O Passo 6 usa a série do IBGE já versionada no repositório. **Não precisa de Docker nem de Postgres** nesta etapa.
 
 ## Como rodar
@@ -62,6 +71,8 @@ De dentro de `explicabilidade-model-risk/`, com o venv ativado:
 ```bash
 python scripts/explicar_lee_carter.py
 ```
+
+Para ver o código de saída: `echo $?` no bash, `echo $LASTEXITCODE` no PowerShell.
 
 - Código de saída `0`: relatório `APROVADO`.
 - Código de saída `1`: relatório `BLOQUEADO`. O motivo aparece no terminal (linhas `ERROR BLOQUEADO`) e no JSON.
@@ -73,7 +84,7 @@ python scripts/explicar_lee_carter.py
 python -m pytest -v
 ```
 
-São 24 testes. A maior parte usa um **Lee-Carter de brinquedo**, com parâmetros escolhidos à mão para que a resposta seja conhecida. Os testes `test_integracao_*` usam o **contrato real** do Passo 6. Testes com brinquedo não comprovam a integração; só os de integração comprovam.
+São 30 testes. A maior parte usa um **Lee-Carter de brinquedo**, com parâmetros escolhidos à mão para que a resposta seja conhecida. Os testes `test_integracao_*` usam o **contrato real** do Passo 6. Testes com brinquedo não comprovam a integração; só os de integração comprovam.
 
 ## Estrutura
 

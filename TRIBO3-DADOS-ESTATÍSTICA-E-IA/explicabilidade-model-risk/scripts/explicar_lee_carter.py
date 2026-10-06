@@ -17,8 +17,10 @@ A taxa q(x,t) é recalculada a partir dos parâmetros com a mesma fórmula de
 `modelos/lee_carter.py::projetar_lee_carter` do Passo 6:
     m(x,t) = exp(alpha_x + beta_x * kappa_t)
     q(x,t) = 1 - exp(-m(x,t))
-Anos históricos usam o kappa_t estimado; anos futuros usam
-kappa_T + h * drift (passeio aleatório com drift, sem choque). Os limites
+Anos futuros usam kappa_T + h * drift (passeio aleatório com drift, sem
+choque), igual ao Passo 6. Anos históricos usam o kappa_t estimado daquele
+ano (valor ajustado); aqui há uma diferença consciente: `projetar_lee_carter`
+usa kappa_T para qualquer ano <= T (ver docs/decisoes.md, D5). Os limites
 de q do Passo 6 (0,000001 a 0,999) também são aplicados; se algum valor
 bater num limite, isso vira alerta.
 
@@ -48,6 +50,7 @@ from PyALE import ale  # noqa: E402
 
 PASTA_RAIZ = Path(__file__).resolve().parent.parent
 PASTA_PASSO6 = PASTA_RAIZ.parent / "tabuas-geracionais-improvement"
+PASTA_DADOS_IBGE = PASTA_RAIZ.parent / "ambiente-de-dados" / "docs" / "referencias" / "ibge_historico"
 PASTA_SAIDA = PASTA_RAIZ / "docs" / "lee_carter"
 ARQUIVO_SCHEMA = PASTA_RAIZ / "schemas" / "relatorio_explicabilidade.schema.json"
 
@@ -59,6 +62,22 @@ FATOR_SALTO_KAPPA = 3.0       # variação anual de kappa_t > 3 x |drift| vira a
 HORIZONTE_PROJECAO_ANOS = 30  # mesmo horizonte do Passo 6 (scripts/config.py)
 GRID_ALE = 20                 # número de faixas do ALE
 Q_MINIMO, Q_MAXIMO = 1e-6, 0.999  # limites de q aplicados pelo Passo 6 (projetar_lee_carter)
+
+NOMES_GRAFICOS = (
+    "alpha_x.png", "beta_x.png", "kappa_t.png",
+    "ale_idade.png", "ale_ano.png", "shap_dependencia.png",
+)
+
+# Código e dados que determinam o resultado; usados no controle de alterações
+# locais da rodada. docs/ fica de fora: é onde a própria rodada grava a saída.
+CAMINHOS_RASTREADOS = (
+    PASTA_RAIZ / "scripts",
+    PASTA_RAIZ / "schemas",
+    PASTA_RAIZ / "requirements.txt",
+    PASTA_PASSO6 / "scripts",
+    PASTA_PASSO6 / "contracts",
+    PASTA_DADOS_IBGE,
+)
 
 NOTA_DE_USO = (
     "Explicação de um modelo de mortalidade populacional agregada (IBGE). "
@@ -166,9 +185,39 @@ def _checagem(nome, aprovado, detalhe):
     return {"nome": nome, "aprovado": bool(aprovado), "detalhe": detalhe}
 
 
+def problemas_estrutura(params):
+    """Inconsistências de forma nos parâmetros que impedem calcular q(x,t)."""
+    problemas = []
+    idades = np.asarray(params["idades"])
+    anos = np.asarray(params["anos_historicos"])
+    if len(idades) == 0 or np.any(np.diff(idades) <= 0):
+        problemas.append("idades vazias ou fora de ordem crescente")
+    if len(anos) < 2 or np.any(np.diff(anos) != 1):
+        problemas.append("anos_historicos com menos de 2 anos, fora de ordem ou com lacunas")
+    for nome in ("alpha_x", "beta_x"):
+        if len(params[nome]) != len(idades):
+            problemas.append(f"{nome} com {len(params[nome])} valores para {len(idades)} idades")
+    if len(params["kappa_t"]) != len(anos):
+        problemas.append(f"kappa_t com {len(params['kappa_t'])} valores para {len(anos)} anos")
+    return problemas
+
+
 def verificar_plausibilidade(params, anos, idade_minima=IDADE_MINIMA_MONOTONIA):
-    """Checagens que, se falharem, impedem a publicação da explicação."""
-    checagens = []
+    """Checagens que, se falharem, impedem a publicação da explicação.
+
+    A primeira checagem é a de estrutura: se ela falhar, as demais não são
+    calculadas (q(x,t) não pode ser calculado com parâmetros malformados).
+    """
+    problemas = problemas_estrutura(params)
+    checagens = [_checagem(
+        "estrutura_consistente", not problemas,
+        "Tamanhos de alpha_x, beta_x e kappa_t batem com idades e anos; "
+        "idades crescentes; anos consecutivos. "
+        + ("Sem problemas." if not problemas else "Problemas: " + "; ".join(problemas)),
+    )]
+    if problemas:
+        return checagens
+
     q = matriz_qx(params, anos)
 
     numeros = np.concatenate([
@@ -177,12 +226,7 @@ def verificar_plausibilidade(params, anos, idade_minima=IDADE_MINIMA_MONOTONIA):
     ])
     checagens.append(_checagem(
         "valores_finitos", np.all(np.isfinite(numeros)),
-        "Parâmetros e q(x,t) sem NaN nem infinito.",
-    ))
-
-    checagens.append(_checagem(
-        "q_entre_0_e_1", np.all((q >= 0) & (q <= 1)),
-        f"q(x,t) entre {q.min():.6f} e {q.max():.6f}.",
+        f"Parâmetros e q(x,t) sem NaN nem infinito; q(x,t) entre {q.min():.6f} e {q.max():.6f}.",
     ))
 
     idades = np.array(params["idades"])
@@ -262,6 +306,18 @@ def gerar_alertas(params, idade_minima=IDADE_MINIMA_MONOTONIA,
             ),
         })
 
+    idades = np.array(params["idades"])
+    beta = np.array(params["beta_x"])
+    if np.any(beta < 0):
+        alertas.append({
+            "tipo": "beta_negativo",
+            "detalhe": (
+                f"beta_x negativo nas idades {idades[beta < 0].tolist()[:10]}: com kappa_t "
+                "caindo, o modelo projeta mortalidade SUBINDO nessas idades. "
+                "Avisar a dupla do Passo 6."
+            ),
+        })
+
     inclinacao = tendencia_linear_kappa(params)
     drift = params["drift"]
     if drift != 0 and abs(inclinacao - drift) / abs(drift) > 0.25:
@@ -275,7 +331,6 @@ def gerar_alertas(params, idade_minima=IDADE_MINIMA_MONOTONIA,
         })
 
     q = matriz_qx(params, params["anos_historicos"])
-    idades = np.array(params["idades"])
     jovens = idades < idade_minima
     quedas_jovens = int(np.sum(np.diff(q[jovens], axis=0) <= 0)) if jovens.sum() > 1 else 0
     if quedas_jovens:
@@ -412,9 +467,14 @@ def gerar_graficos(params, ale_res, shap_res, pasta):
                xlabel=titulo, ylabel="Efeito em q (diferença da média)")
         nomes.append(_salvar(fig, pasta, f"ale_{feature}.png"))
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-    for i, (feature, titulo) in enumerate((("idade", "Idade"), ("ano", "Ano"))):
-        axs[i].scatter(shap_res["pontos"][:, i], shap_res["valores"][:, i], s=4)
+    # Cor = a outra entrada: mostra a interação idade x ano, que o ALE não mostra.
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4))
+    titulos = ("Idade", "Ano")
+    for i, titulo in enumerate(titulos):
+        outra = 1 - i
+        pontos = axs[i].scatter(shap_res["pontos"][:, i], shap_res["valores"][:, i],
+                                c=shap_res["pontos"][:, outra], cmap="viridis", s=4)
+        fig.colorbar(pontos, ax=axs[i], label=titulos[outra])
         axs[i].axhline(0, color="grey", linewidth=0.8)
         axs[i].set(title=f"SHAP de {titulo.lower()}", xlabel=titulo,
                    ylabel="Contribuição para q(x,t)")
@@ -428,15 +488,20 @@ def gerar_graficos(params, ale_res, shap_res, pasta):
 # ---------------------------------------------------------------------------
 
 def commit_atual():
-    """SHA do commit do repositório e se há alterações não commitadas."""
+    """SHA do commit do repositório e se há alterações não commitadas.
+
+    "Alterações locais" considera o código desta pasta, o código do Passo 6
+    e a série do IBGE (CAMINHOS_RASTREADOS), mas não docs/: preencher o
+    experiment record ou ter saídas de uma rodada anterior não invalida a rodada.
+    """
     try:
         sha = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=PASTA_RAIZ,
             capture_output=True, text=True, check=True,
         ).stdout.strip()
         sujo = subprocess.run(
-            ["git", "status", "--porcelain", "--", "."], cwd=PASTA_RAIZ,
-            capture_output=True, text=True, check=True,
+            ["git", "status", "--porcelain", "--", *map(str, CAMINHOS_RASTREADOS)],
+            cwd=PASTA_RAIZ, capture_output=True, text=True, check=True,
         ).stdout.strip() != ""
         return sha, sujo
     except (OSError, subprocess.CalledProcessError):
@@ -509,10 +574,15 @@ def executar(params, pasta_saida=PASTA_SAIDA):
     sha, sujo = commit_atual()
     pasta_saida = Path(pasta_saida)
     pasta_saida.mkdir(parents=True, exist_ok=True)
+    # Gráficos de uma rodada anterior não podem sobrar ao lado de um relatório novo
+    # (principalmente se o novo for BLOQUEADO e não listar gráfico nenhum).
+    for nome in NOMES_GRAFICOS:
+        (pasta_saida / nome).unlink(missing_ok=True)
 
     anos = anos_analisados(params)
     checagens = verificar_plausibilidade(params, anos)
-    alertas = gerar_alertas(params)
+    estrutura_ok = checagens[0]["aprovado"]
+    alertas = gerar_alertas(params) if estrutura_ok else []
     for a in alertas:
         log.warning("ALERTA %s: %s", a["tipo"], a["detalhe"])
 

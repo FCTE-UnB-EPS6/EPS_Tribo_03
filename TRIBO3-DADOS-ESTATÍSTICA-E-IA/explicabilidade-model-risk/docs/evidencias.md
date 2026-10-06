@@ -7,8 +7,8 @@
 
 | # | O que prova | Comando (de dentro de `explicabilidade-model-risk/`) | Resultado | Commit |
 |---|---|---|---|---|
-| EVD-1 | Testes unitários e de integração passam | `python -m pytest -v` | `PREENCHER: ex. 24 passed in X s` | `PREENCHER SHA` |
-| EVD-2 | Script gera o relatório APROVADO a partir do contrato real do Passo 6 | `python scripts/explicar_lee_carter.py; echo "código de saída: $?"` | `PREENCHER: status APROVADO, código 0` | `PREENCHER SHA` |
+| EVD-1 | Testes unitários e de integração passam | `python -m pytest -v` | `PREENCHER: ex. 30 passed in X s` | `PREENCHER SHA` |
+| EVD-2 | Script gera o relatório APROVADO a partir do contrato real do Passo 6 | bash: `python scripts/explicar_lee_carter.py; echo "código de saída: $?"` · PowerShell: `python scripts/explicar_lee_carter.py; echo "código de saída: $LASTEXITCODE"` | `PREENCHER: status APROVADO, código 0` | `PREENCHER SHA` |
 | EVD-3 | Relatório segue o contrato v1.0.0 | validação automática dentro do script (`validar_relatorio`) e testes `test_schema_*` | `PREENCHER` | `PREENCHER SHA` |
 | EVD-4 | Artefatos versionados | `docs/lee_carter/` (JSON + 6 PNG) | arquivos no commit | `PREENCHER SHA` |
 
@@ -26,5 +26,5 @@ PREENCHER: colar aqui a saída de `python scripts/explicar_lee_carter.py`
 
 ## Observações
 
-- O `rodada.commit` gravado no JSON é o commit do **código** no momento da rodada. Por isso a ordem é: (1) commitar o código, (2) rodar o script, (3) commitar as saídas e este arquivo. O JSON deve mostrar `commit_com_alteracoes_locais: false`.
+- O `rodada.commit` gravado no JSON é o commit do **código** no momento da rodada. Por isso a ordem é: (1) commitar o código, (2) rodar o script, (3) commitar as saídas e este arquivo. O JSON deve mostrar `commit_com_alteracoes_locais: false`. Esse campo olha o código desta pasta, o do Passo 6 e a série do IBGE, mas não `docs/` ([decisões, D11](decisoes.md)).
 - **Testes com modelo de brinquedo** (fixture `params_brinquedo`) verificam a lógica, mas **não** comprovam a integração. A integração é comprovada pelos testes `test_integracao_*` e pela EVD-2, que usam o contrato real.

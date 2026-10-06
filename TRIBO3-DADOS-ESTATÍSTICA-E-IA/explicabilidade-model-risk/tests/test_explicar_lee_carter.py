@@ -69,8 +69,7 @@ def test_qx_futuro_usa_drift(params_brinquedo):
     assert q == pytest.approx(q_manual(-5.6, 0.2, -5.0))
 
 
-def test_qx_igual_a_formula_do_passo6():
-    """Mesma fórmula de modelos/lee_carter.py::projetar_lee_carter (Passo 6)."""
+def _passo6_e_params_minimos():
     sys.path.insert(0, str(elc.PASTA_PASSO6 / "scripts"))
     from modelos.lee_carter import projetar_lee_carter
 
@@ -83,11 +82,28 @@ def test_qx_igual_a_formula_do_passo6():
         "ax": np.array(params["alpha_x"]), "bx": np.array(params["beta_x"]),
         "kt": np.array(params["kappa_t"]), "drift": params["drift"],
     }
+    return projetar_lee_carter, params, modelo_passo6
+
+
+def test_qx_igual_a_formula_do_passo6():
+    """Mesma fórmula de modelos/lee_carter.py::projetar_lee_carter (Passo 6),
+    no último ano histórico e na projeção."""
+    projetar_lee_carter, params, modelo_passo6 = _passo6_e_params_minimos()
     for idade in (40, 41):
         for ano in (2011, 2015, 2030):
             esperado = projetar_lee_carter(modelo_passo6, idade, ano)
             obtido = elc.calcular_qx(params, [idade], [ano])[0]
             assert obtido == pytest.approx(esperado, rel=1e-9)
+
+
+def test_qx_historico_difere_do_passo6_de_proposito():
+    """Diferença registrada em decisoes.md (D5): antes do último ano, o Passo 6
+    usa kappa_T; aqui usamos o kappa_t ajustado daquele ano."""
+    projetar_lee_carter, params, modelo_passo6 = _passo6_e_params_minimos()
+    passo6 = projetar_lee_carter(modelo_passo6, 40, 2010)
+    nosso = elc.calcular_qx(params, [40], [2010])[0]
+    assert passo6 == pytest.approx(q_manual(-5.0, 0.4, -1.0))  # kappa de 2011
+    assert nosso == pytest.approx(q_manual(-5.0, 0.4, 1.0))    # kappa de 2010
 
 
 def test_ano_antes_da_serie_e_rejeitado(params_brinquedo):
@@ -152,8 +168,28 @@ def test_valor_nao_finito_bloqueia(params_brinquedo):
     assert not checagens["valores_finitos"]["aprovado"]
 
 
+def test_estrutura_inconsistente_bloqueia_sem_quebrar(params_brinquedo):
+    params_brinquedo["beta_x"] = params_brinquedo["beta_x"][:4]  # 4 betas para 5 idades
+    anos = elc.anos_analisados(params_brinquedo, horizonte=5)
+    checagens = elc.verificar_plausibilidade(params_brinquedo, anos)
+    assert [c["nome"] for c in checagens] == ["estrutura_consistente"]
+    assert not checagens[0]["aprovado"]
+
+
+def test_anos_com_lacuna_bloqueiam(params_brinquedo):
+    params_brinquedo["anos_historicos"] = [2000, 2001, 2003, 2004, 2005]
+    assert elc.problemas_estrutura(params_brinquedo)
+
+
+def test_beta_negativo_vira_alerta(params_brinquedo):
+    params_brinquedo["beta_x"] = [0.3, 0.3, 0.3, 0.2, -0.1]  # soma continua 1
+    tipos = [a["tipo"] for a in elc.gerar_alertas(params_brinquedo)]
+    assert "beta_negativo" in tipos
+
+
 def test_salto_de_kappa_e_detectado(params_brinquedo):
-    # Variações: -1, +4, -5, -1. Limite = 3 x |drift| = 3. Saltos: 2001->2002 e 2002->2003.
+    # Variações: -1, +4, -5, -1. Limite = fator x |drift| = 4 x 0,75 = 3.
+    # Saltos: 2001->2002 e 2002->2003.
     params_brinquedo["kappa_t"] = [1.0, 0.0, 4.0, -1.0, -2.0]
     params_brinquedo["drift"] = -0.75
     saltos = elc.detectar_saltos_kappa(params_brinquedo, fator=4.0)  # limite 3
@@ -231,6 +267,20 @@ def test_execucao_implausivel_e_bloqueada(params_brinquedo, tmp_path):
     assert relatorio["ale"] is None and relatorio["shap"] is None
     assert relatorio["graficos"] == []
     assert not list(tmp_path.glob("*.png"))
+
+
+def test_bloqueado_apaga_graficos_da_rodada_anterior(params_brinquedo, tmp_path):
+    assert elc.executar(params_brinquedo, pasta_saida=tmp_path)["status"] == "APROVADO"
+    assert list(tmp_path.glob("*.png"))
+    implausivel = copy.deepcopy(params_brinquedo)
+    implausivel["alpha_x"][4] = -9.0
+    assert elc.executar(implausivel, pasta_saida=tmp_path)["status"] == "BLOQUEADO"
+    assert not list(tmp_path.glob("*.png"))
+
+
+def test_graficos_gerados_sao_os_esperados(params_brinquedo, tmp_path):
+    relatorio = elc.executar(params_brinquedo, pasta_saida=tmp_path)
+    assert sorted(relatorio["graficos"]) == sorted(elc.NOMES_GRAFICOS)
 
 
 def test_schema_rejeita_relatorio_sem_campo(params_brinquedo, tmp_path):

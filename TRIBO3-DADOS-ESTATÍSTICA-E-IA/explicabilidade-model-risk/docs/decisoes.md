@@ -39,6 +39,7 @@ Registro das decisões técnicas, das alternativas consideradas e dos motivos. C
 - **Decisão:** q(x,t) é recalculado com o mesmo corte do Passo 6 (`projetar_lee_carter`: q entre 0,000001 e 0,999). Se algum valor bater no limite, gera o alerta `q_no_limite_de_corte`.
 - **Alternativa:** usar a fórmula sem corte.
 - **Motivo:** a explicação precisa ser do modelo que o Passo 6 realmente usa. Um teste compara nossa fórmula com a função do Passo 6.
+- **Precisada pela D8:** a igualdade vale na projeção; nos anos históricos há uma diferença consciente.
 
 ### D6. Experiment record em `.md` no formato MLflow (05/10/2026, dupla D3.7)
 
@@ -51,3 +52,32 @@ Registro das decisões técnicas, das alternativas consideradas e dos motivos. C
 - **Decisão:** o script grava sempre em `docs/lee_carter/` com os mesmos nomes. Cada rodada oficial é commitada e ganha uma entrada nova no experiment record com o SHA do commit.
 - **Alternativa:** uma pasta nova por rodada.
 - **Motivo:** evita acumular cópias de PNG no repositório; o Git já guarda cada versão. O JSON traz `rodada.id` e `rodada.commit`, então nenhuma rodada se perde.
+
+### D8. Anos históricos usam o kappa_t ajustado; precisa a D5 (05/10/2026, dupla D3.7)
+
+- **Decisão:** a D5 vale para a projeção (anos após o último ano histórico), em que nossa fórmula é idêntica à do Passo 6. Nos anos históricos usamos o kappa_t ajustado de cada ano. `projetar_lee_carter` usa kappa_T para qualquer ano ≤ T.
+- **Alternativa:** copiar o comportamento do Passo 6 também nos anos históricos.
+- **Motivo:** com kappa_T fixo, os 10 anos históricos teriam o mesmo q, e o ALE e o SHAP de "ano" não mostrariam a trajetória observada nem o salto de 2022. A diferença fica documentada pelo teste `test_qx_historico_difere_do_passo6_de_proposito`.
+
+### D9. `estrutura_consistente` substitui `q_entre_0_e_1` (05/10/2026, dupla D3.7)
+
+- **Decisão:** a checagem `q_entre_0_e_1` sai. Entra `estrutura_consistente`, que confere: tamanhos de alpha_x, beta_x e kappa_t contra idades e anos; idades crescentes; anos consecutivos. Se ela falhar, as demais checagens não são calculadas e o relatório sai BLOQUEADO. A faixa de q passa a aparecer no detalhe de `valores_finitos`.
+- **Alternativa:** manter as duas.
+- **Motivo:** `q_entre_0_e_1` nunca falhava, porque q já sai cortado em [0,000001; 0,999]. Uma entrada malformada, por outro lado, derrubava o script com exceção em vez de gerar o relatório BLOQUEADO.
+
+### D10. Alerta `beta_negativo` (05/10/2026, dupla D3.7)
+
+- **Decisão:** beta_x < 0 em alguma idade gera um alerta, sem bloquear.
+- **Alternativa:** bloquear.
+- **Motivo:** beta negativo quer dizer mortalidade projetada subindo naquela idade. É um diagnóstico clássico do Lee-Carter e pode aparecer em séries curtas sem ser erro de cálculo. Segue a mesma lógica da D4: o achado é sobre o modelo de origem e vai para a dupla do Passo 6.
+
+### D11. Controle de alterações locais e limpeza das saídas (05/10/2026, dupla D3.7)
+
+- **Decisão:** (a) `rodada.commit_com_alteracoes_locais` olha `scripts/`, `schemas/` e `requirements.txt` desta pasta, `scripts/` e `contracts/` do Passo 6 e a série do IBGE (`ambiente-de-dados/docs/referencias/ibge_historico/`), mas não `docs/`. (b) Cada rodada apaga os PNGs da rodada anterior antes de gerar os novos.
+- **Alternativa:** olhar só esta pasta inteira, como antes.
+- **Motivo:** (a) uma mudança no Passo 6 ou nos dados muda o resultado e não era detectada; já preencher o experiment record ou ter saídas de uma rodada anterior marcava a rodada como "suja" sem motivo. (b) Sem a limpeza, uma rodada BLOQUEADA deixava os gráficos aprovados da rodada anterior ao lado de um JSON que não lista gráfico nenhum.
+
+### Pendente para a dupla decidir
+
+- **Limite do `salto_kappa`:** hoje é 3 × |drift| (D4). O drift depende só das pontas da série (MR2), e com drift perto de zero qualquer variação vira salto. Uma alternativa mais robusta é 3 × mediana(|Δkappa_t|). Não foi trocado porque muda os números já registrados na rodada 1.
+- **Alerta `corcova_de_acidentes`** olha só os anos históricos, enquanto `q_cresce_com_idade` olha 2015-2054. Alinhar os dois pode mudar a contagem de 7 casos.
