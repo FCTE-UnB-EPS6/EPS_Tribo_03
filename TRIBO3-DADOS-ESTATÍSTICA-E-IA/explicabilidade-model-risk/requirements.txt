@@ -1,0 +1,16 @@
+# Versões fixas (RNF04). Testadas em Python 3.12.3, 05/10/2026.
+# Dependências do contrato do Passo 6 (tabuas-geracionais-improvement/scripts/requirements.txt),
+# necessárias porque o script chama obter_parametros_para_passo7():
+psycopg2-binary==2.9.13
+scipy==1.18.1
+statsmodels==0.15.0
+openpyxl==3.1.5
+# Explicabilidade (Passo 7):
+numpy==2.5.3
+pandas==3.0.6
+matplotlib==3.11.2
+PyALE==1.2.0
+jsonschema==4.26.0
+# Testes (shap é usado só para conferir a fórmula fechada do SHAP):
+pytest==9.1.1
+shap==0.52.0
