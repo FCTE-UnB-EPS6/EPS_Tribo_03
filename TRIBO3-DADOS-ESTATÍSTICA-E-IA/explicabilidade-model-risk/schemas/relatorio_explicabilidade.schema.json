@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "relatorio_explicabilidade.schema.json",
+  "title": "Relatório de explicabilidade e model risk (Passo 7 / SL-07)",
+  "description": "Contrato v1.0.0 do relatório gerado por scripts/explicar_lee_carter.py. Consumidores: Tribo 1 (explicações), Tribo 6 (evidências), SL-08.",
+  "type": "object",
+  "required": [
+    "versao_contrato", "modelo", "passo_origem", "status", "rodada",
+    "parametros", "plausibilidade", "alertas", "ale", "shap", "graficos", "nota_de_uso"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "versao_contrato": { "const": "1.0.0" },
+    "modelo": { "type": "string", "minLength": 1 },
+    "passo_origem": { "type": "integer", "enum": [2, 5, 6] },
+    "status": { "enum": ["APROVADO", "BLOQUEADO"] },
+    "rodada": {
+      "type": "object",
+      "required": ["id", "data_hora_utc", "commit", "commit_com_alteracoes_locais", "versoes", "tempo_execucao_s"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "data_hora_utc": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "minLength": 1 },
+        "commit_com_alteracoes_locais": { "type": "boolean" },
+        "versoes": { "type": "object", "additionalProperties": { "type": "string" } },
+        "tempo_execucao_s": { "type": "number", "minimum": 0 }
+      }
+    },
+    "parametros": {
+      "type": "object",
+      "required": [
+        "idades", "anos_historicos", "anos_analisados", "alpha_x", "beta_x",
+        "kappa_t", "drift", "variancia_explicada", "origem_dados"
+      ],
+      "properties": {
+        "idades": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
+        "anos_historicos": { "type": "array", "items": { "type": "integer" }, "minItems": 2 },
+        "anos_analisados": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+        "alpha_x": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+        "beta_x": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+        "kappa_t": { "type": "array", "items": { "type": "number" }, "minItems": 2 },
+        "drift": { "type": "number" },
+        "variancia_explicada": { "type": "number", "minimum": 0, "maximum": 1 },
+        "origem_dados": { "type": "string", "minLength": 1 }
+      }
+    },
+    "plausibilidade": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["nome", "aprovado", "detalhe"],
+        "additionalProperties": false,
+        "properties": {
+          "nome": { "type": "string" },
+          "aprovado": { "type": "boolean" },
+          "detalhe": { "type": "string" }
+        }
+      }
+    },
+    "alertas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tipo", "detalhe"],
+        "additionalProperties": false,
+        "properties": {
+          "tipo": { "type": "string" },
+          "detalhe": { "type": "string" }
+        }
+      }
+    },
+    "ale": {
+      "description": "null quando status = BLOQUEADO.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["valor", "efeito"],
+              "additionalProperties": false,
+              "properties": {
+                "valor": { "type": "number" },
+                "efeito": { "type": "number" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "shap": {
+      "description": "null quando status = BLOQUEADO.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["valor_base", "importancia_media_abs"],
+          "additionalProperties": false,
+          "properties": {
+            "valor_base": { "type": "number" },
+            "importancia_media_abs": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "graficos": { "type": "array", "items": { "type": "string", "pattern": "\\.png$" } },
+    "nota_de_uso": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "APROVADO" } } },
+      "then": {
+        "properties": {
+          "ale": { "type": "object" },
+          "shap": { "type": "object" },
+          "graficos": { "minItems": 1 },
+          "plausibilidade": { "items": { "properties": { "aprovado": { "const": true } } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "BLOQUEADO" } } },
+      "then": {
+        "properties": { "ale": { "type": "null" }, "shap": { "type": "null" }, "graficos": { "maxItems": 0 } },
+        "not": { "properties": { "plausibilidade": { "items": { "properties": { "aprovado": { "const": true } } } } } }
+      }
+    }
+  ]
+}
