@@ -77,6 +77,13 @@ Registro das decisões técnicas, das alternativas consideradas e dos motivos. C
 - **Alternativa:** olhar só esta pasta inteira, como antes.
 - **Motivo:** (a) uma mudança no Passo 6 ou nos dados muda o resultado e não era detectada; já preencher o experiment record ou ter saídas de uma rodada anterior marcava a rodada como "suja" sem motivo. (b) Sem a limpeza, uma rodada BLOQUEADA deixava os gráficos aprovados da rodada anterior ao lado de um JSON que não lista gráfico nenhum.
 
+### D12. `estrutura_consistente` também confere número de idades e variância explicada (06/10/2026, dupla D3.7)
+
+- **Decisão:** a checagem passa a exigir pelo menos 2 idades e `variancia_explicada` finita entre 0 e 1. Listas de idades ou de anos vazias também geram BLOQUEADO (antes quebravam).
+- **Alternativa:** deixar como estava.
+- **Motivo:** num teste com entradas estragadas, esses dois casos faziam o script **quebrar** (erro de validação do schema) em vez de gravar o relatório BLOQUEADO. Nada errado era publicado, mas o bloqueio não ficava registrado, que é o que a Issue #53 pede. Com dados reais do IBGE nenhum dos casos acontece.
+- **Junto:** no relatório, parâmetro não finito (NaN ou infinito) passa a ser gravado como `null`, e o JSON é gravado com `allow_nan=False`. Antes, um relatório BLOQUEADO por NaN saía com `NaN` no arquivo, que não é JSON válido e quebraria quem fosse ler. O schema v1.0.0 passa a aceitar `null` nesses campos, **só** quando o status é BLOQUEADO; no APROVADO continua exigindo número (e variância entre 0 e 1). Pelo mesmo motivo, os tamanhos mínimos das listas (idades, anos, alpha, beta, kappa) passam a ser exigidos só no APROVADO, para que um relatório BLOQUEADO consiga registrar a entrada vazia que recebeu. Como o contrato ainda não foi publicado nem consumido por ninguém, a versão continua 1.0.0.
+
 ### Pendente para a dupla decidir
 
 - **Limite do `salto_kappa`:** hoje é 3 × |drift| (D4). O drift depende só das pontas da série (MR2), e com drift perto de zero qualquer variação vira salto. Uma alternativa mais robusta é 3 × mediana(|Δkappa_t|). Não foi trocado porque muda os números já registrados na rodada 1.

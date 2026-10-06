@@ -190,8 +190,9 @@ def problemas_estrutura(params):
     problemas = []
     idades = np.asarray(params["idades"])
     anos = np.asarray(params["anos_historicos"])
-    if len(idades) == 0 or np.any(np.diff(idades) <= 0):
-        problemas.append("idades vazias ou fora de ordem crescente")
+    # Pelo menos 2 idades: com 1 só não há curva por idade (o ALE sai NaN).
+    if len(idades) < 2 or np.any(np.diff(idades) <= 0):
+        problemas.append("idades com menos de 2 valores ou fora de ordem crescente")
     if len(anos) < 2 or np.any(np.diff(anos) != 1):
         problemas.append("anos_historicos com menos de 2 anos, fora de ordem ou com lacunas")
     for nome in ("alpha_x", "beta_x"):
@@ -199,6 +200,11 @@ def problemas_estrutura(params):
             problemas.append(f"{nome} com {len(params[nome])} valores para {len(idades)} idades")
     if len(params["kappa_t"]) != len(anos):
         problemas.append(f"kappa_t com {len(params['kappa_t'])} valores para {len(anos)} anos")
+    # Fração da variância: só faz sentido entre 0 e 1. Fora disso (ou NaN) o
+    # relatório nem passaria no schema, e o script quebraria em vez de bloquear.
+    variancia = params["variancia_explicada"]
+    if not (np.isfinite(variancia) and 0 <= variancia <= 1):
+        problemas.append(f"variancia_explicada = {variancia} fora de [0, 1]")
     return problemas
 
 
@@ -528,6 +534,16 @@ def validar_relatorio(relatorio):
     jsonschema.validate(relatorio, carregar_schema())
 
 
+def _numero_json(valor):
+    """float, ou None se não for finito: NaN e infinito não existem em JSON.
+
+    Só acontece em relatório BLOQUEADO (a checagem valores_finitos garante
+    números finitos no APROVADO); o schema exige número no APROVADO.
+    """
+    valor = float(valor)
+    return valor if np.isfinite(valor) else None
+
+
 def montar_relatorio(params, anos, checagens, alertas, ale_res, shap_resumo,
                      graficos, rodada):
     aprovado = all(c["aprovado"] for c in checagens)
@@ -540,12 +556,12 @@ def montar_relatorio(params, anos, checagens, alertas, ale_res, shap_resumo,
         "parametros": {
             "idades": [int(x) for x in params["idades"]],
             "anos_historicos": [int(x) for x in params["anos_historicos"]],
-            "anos_analisados": [int(anos[0]), int(anos[-1])],
-            "alpha_x": [float(x) for x in params["alpha_x"]],
-            "beta_x": [float(x) for x in params["beta_x"]],
-            "kappa_t": [float(x) for x in params["kappa_t"]],
-            "drift": float(params["drift"]),
-            "variancia_explicada": float(params["variancia_explicada"]),
+            "anos_analisados": [int(anos[0]), int(anos[-1])] if anos else [],
+            "alpha_x": [_numero_json(x) for x in params["alpha_x"]],
+            "beta_x": [_numero_json(x) for x in params["beta_x"]],
+            "kappa_t": [_numero_json(x) for x in params["kappa_t"]],
+            "drift": _numero_json(params["drift"]),
+            "variancia_explicada": _numero_json(params["variancia_explicada"]),
             "origem_dados": params["origem_dados"],
         },
         "plausibilidade": checagens,
@@ -579,7 +595,8 @@ def executar(params, pasta_saida=PASTA_SAIDA):
     for nome in NOMES_GRAFICOS:
         (pasta_saida / nome).unlink(missing_ok=True)
 
-    anos = anos_analisados(params)
+    # Sem anos históricos não há período para analisar; a checagem de estrutura bloqueia.
+    anos = anos_analisados(params) if len(params["anos_historicos"]) else []
     checagens = verificar_plausibilidade(params, anos)
     estrutura_ok = checagens[0]["aprovado"]
     alertas = gerar_alertas(params) if estrutura_ok else []
@@ -613,7 +630,7 @@ def executar(params, pasta_saida=PASTA_SAIDA):
 
     caminho = pasta_saida / "relatorio_explicabilidade_lee_carter.json"
     with open(caminho, "w", encoding="utf-8") as f:
-        json.dump(relatorio, f, ensure_ascii=False, indent=2)
+        json.dump(relatorio, f, ensure_ascii=False, indent=2, allow_nan=False)
     log.info("Relatório %s gravado em %s (%.2fs)", relatorio["status"], caminho,
              rodada["tempo_execucao_s"])
     return relatorio

@@ -34,14 +34,14 @@
         "kappa_t", "drift", "variancia_explicada", "origem_dados"
       ],
       "properties": {
-        "idades": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
-        "anos_historicos": { "type": "array", "items": { "type": "integer" }, "minItems": 2 },
-        "anos_analisados": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
-        "alpha_x": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
-        "beta_x": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
-        "kappa_t": { "type": "array", "items": { "type": "number" }, "minItems": 2 },
-        "drift": { "type": "number" },
-        "variancia_explicada": { "type": "number", "minimum": 0, "maximum": 1 },
+        "idades": { "type": "array", "items": { "type": "integer" } },
+        "anos_historicos": { "type": "array", "items": { "type": "integer" } },
+        "anos_analisados": { "type": "array", "items": { "type": "integer" }, "maxItems": 2 },
+        "alpha_x": { "type": "array", "items": { "type": ["number", "null"] } },
+        "beta_x": { "type": "array", "items": { "type": ["number", "null"] } },
+        "kappa_t": { "type": "array", "items": { "type": ["number", "null"] } },
+        "drift": { "type": ["number", "null"] },
+        "variancia_explicada": { "type": ["number", "null"] },
         "origem_dados": { "type": "string", "minLength": 1 }
       }
     },
@@ -124,6 +124,18 @@
           "ale": { "type": "object" },
           "shap": { "type": "object" },
           "graficos": { "minItems": 1 },
+          "parametros": {
+            "properties": {
+              "idades": { "minItems": 2 },
+              "anos_historicos": { "minItems": 2 },
+              "anos_analisados": { "minItems": 2 },
+              "alpha_x": { "minItems": 2, "items": { "type": "number" } },
+              "beta_x": { "minItems": 2, "items": { "type": "number" } },
+              "kappa_t": { "minItems": 2, "items": { "type": "number" } },
+              "drift": { "type": "number" },
+              "variancia_explicada": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
           "plausibilidade": { "items": { "properties": { "aprovado": { "const": true } } } }
         }
       }

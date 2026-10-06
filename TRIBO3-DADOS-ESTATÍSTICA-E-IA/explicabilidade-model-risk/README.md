@@ -84,7 +84,7 @@ Para ver o código de saída: `echo $?` no bash, `echo $LASTEXITCODE` no PowerSh
 python -m pytest -v
 ```
 
-São 30 testes. A maior parte usa um **Lee-Carter de brinquedo**, com parâmetros escolhidos à mão para que a resposta seja conhecida. Os testes `test_integracao_*` usam o **contrato real** do Passo 6. Testes com brinquedo não comprovam a integração; só os de integração comprovam.
+São 40 testes. A maior parte usa um **Lee-Carter de brinquedo**, com parâmetros escolhidos à mão para que a resposta seja conhecida. Os testes `test_integracao_*` usam o **contrato real** do Passo 6. Testes com brinquedo não comprovam a integração; só os de integração comprovam.
 
 ## Estrutura
 

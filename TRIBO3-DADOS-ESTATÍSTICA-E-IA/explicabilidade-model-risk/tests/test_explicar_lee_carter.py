@@ -176,6 +176,53 @@ def test_estrutura_inconsistente_bloqueia_sem_quebrar(params_brinquedo):
     assert not checagens[0]["aprovado"]
 
 
+@pytest.mark.parametrize("variancia", [1.5, -0.1, float("nan")])
+def test_variancia_explicada_invalida_gera_bloqueado_sem_quebrar(params_brinquedo, tmp_path, variancia):
+    params_brinquedo["variancia_explicada"] = variancia
+    relatorio = elc.executar(params_brinquedo, pasta_saida=tmp_path)
+    assert relatorio["status"] == "BLOQUEADO"
+    assert (tmp_path / "relatorio_explicabilidade_lee_carter.json").exists()
+
+
+@pytest.mark.parametrize("campo,indice", [("alpha_x", 0), ("kappa_t", 2), ("drift", None)])
+def test_bloqueado_com_nan_grava_json_valido(params_brinquedo, tmp_path, campo, indice):
+    """NaN não existe em JSON: no relatório BLOQUEADO ele vira null."""
+    if indice is None:
+        params_brinquedo[campo] = float("nan")
+    else:
+        params_brinquedo[campo][indice] = float("nan")
+    relatorio = elc.executar(params_brinquedo, pasta_saida=tmp_path)
+    assert relatorio["status"] == "BLOQUEADO"
+    texto = (tmp_path / "relatorio_explicabilidade_lee_carter.json").read_text("utf-8")
+
+    def rejeitar(constante):
+        raise ValueError(f"{constante} não é JSON válido")
+
+    gravado = json.loads(texto, parse_constant=rejeitar)
+    valor = gravado["parametros"][campo]
+    assert (valor if indice is None else valor[indice]) is None
+
+
+def test_schema_rejeita_aprovado_com_parametro_null(params_brinquedo, tmp_path):
+    relatorio = elc.executar(params_brinquedo, pasta_saida=tmp_path)
+    adulterado = copy.deepcopy(relatorio)
+    adulterado["parametros"]["drift"] = None
+    with pytest.raises(jsonschema.ValidationError):
+        elc.validar_relatorio(adulterado)
+
+
+@pytest.mark.parametrize("entrada", [
+    {"idades": [30], "alpha_x": [-5.8], "beta_x": [1.0]},          # 1 idade só
+    {"idades": [], "alpha_x": [], "beta_x": []},                    # nenhuma idade
+    {"anos_historicos": [], "kappa_t": []},                         # nenhum ano
+])
+def test_entrada_vazia_ou_curta_gera_bloqueado_sem_quebrar(params_brinquedo, tmp_path, entrada):
+    params_brinquedo.update(entrada)
+    relatorio = elc.executar(params_brinquedo, pasta_saida=tmp_path)
+    assert relatorio["status"] == "BLOQUEADO"
+    assert (tmp_path / "relatorio_explicabilidade_lee_carter.json").exists()
+
+
 def test_anos_com_lacuna_bloqueiam(params_brinquedo):
     params_brinquedo["anos_historicos"] = [2000, 2001, 2003, 2004, 2005]
     assert elc.problemas_estrutura(params_brinquedo)
