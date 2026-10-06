@@ -12,10 +12,10 @@
 
 | Campo | Valor |
 |---|---|
-| `rodada.id` | `PREENCHER com rodada.id do JSON` |
-| `data_hora_utc` | `PREENCHER com rodada.data_hora_utc do JSON` |
-| `commit` | `PREENCHER com rodada.commit do JSON` |
-| `commit_com_alteracoes_locais` | `PREENCHER` (precisa ser `false` para valer como evidência) |
+| `rodada.id` | `20261006T125901Z` |
+| `data_hora_utc` | 2026-10-06T12:59:01+00:00 |
+| `commit` | `c1b08deb0123e22b9d212b434c901845d110ef1b` (`c1b08de`) |
+| `commit_com_alteracoes_locais` | `false` |
 | `quem_rodou` | Leticia Arisa Kobayashi Higa |
 | `modelo` | Lee-Carter (Passo 6) |
 | `status` | APROVADO |
@@ -47,9 +47,9 @@
 | `shap_valor_base` | 0,006104 |
 | `shap_importancia_idade` | 0,004331 |
 | `shap_importancia_ano` | 0,000848 |
-| `checagens_aprovadas` | 5 de 5 |
-| `alertas` | 4 (2 × `salto_kappa`, `drift_sensivel_aos_extremos`, `corcova_de_acidentes`) |
-| `tempo_execucao_s` | `PREENCHER com rodada.tempo_execucao_s do JSON` (cerca de 1 s no teste de 05/10) |
+| `checagens_aprovadas` | 5 de 5 (`estrutura_consistente`, `valores_finitos`, `q_cresce_com_idade`, `kappa_em_queda`, `restricoes_canonicas`) |
+| `alertas` | 4 (2 × `salto_kappa`, `drift_sensivel_aos_extremos`, `corcova_de_acidentes`); `beta_negativo` e `q_no_limite_de_corte` não dispararam |
+| `tempo_execucao_s` | 1,069 |
 
 ### artifacts
 
@@ -59,4 +59,5 @@
 
 - Primeira rodada da Etapa 1. Os alertas de model risk estão descritos no [model card](model_card_lee_carter.md#6-model-risk-alertas-não-bloqueiam-mas-precisam-de-resposta).
 - O limite de tempo de execução (RNF02) será definido a partir desta medição.
-- **Antes de preencher esta rodada:** o script mudou depois do teste de 05/10 (decisões D8 a D11: checagem `estrutura_consistente` no lugar de `q_entre_0_e_1`, alerta `beta_negativo`, novo controle de alterações locais). Rode de novo com o código atual e confira os números acima contra o JSON novo, em especial a contagem de alertas.
+- Rodada feita com o código que já inclui as decisões D8 a D12 (checagem `estrutura_consistente` ampliada, alerta `beta_negativo`, controle de alterações locais, `null` no lugar de NaN). Os números conferem com o JSON desta rodada.
+- Testes no mesmo commit: 40 passed (ver [evidências, EVD-1](evidencias.md)).
