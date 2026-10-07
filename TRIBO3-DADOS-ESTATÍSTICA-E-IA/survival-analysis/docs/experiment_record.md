@@ -1,117 +1,110 @@
-# Experiment Record — Modelo Individual de Sobrevivência
+# Experiment record — SL-02
 
-## Estado da integração oficial
+Responsáveis: Caio Brandão Santos e Pedro Lucas Figueiredo Santana.
+Revisão: 07/10/2026. Base: main `d2aa90a05772f002d75fe130e4cd291288e64363`.
+[Issue #34](https://github.com/FCTE-UnB-EPS6/estudos-populacionais/issues/34).
 
-**Pendente: rodada sobre as tabelas finais do Postgres do Passo 1.** Em 12/09/2026,
-a tentativa de conexão ao endereço padrão `localhost:5433` foi recusada. Não há
-instância/exportação do banco do grupo disponível neste ambiente. O script
-interrompeu, sem gerar dados locais em substituição e sem publicar métricas oficiais.
+## Execução e reprodução
 
-Código do Passo 1 consultado: branch `feat/ambiente-de-dados`, commit `a36946f`.
-Código original do Passo 2 revisado: `02e4ada` na branch
-`docs/relatorio-atividades-tribo3`. As correções continuam nessa mesma branch.
+Fonte: tabelas finais participante, evento e exposicao do Postgres local do
+autor, recarregadas com o gerador e a curadoria existentes do Passo 1.
+Carga: `Passo1_N3000_seed42_ref2026-10-07`; 3.000 participantes gerados,
+seed 42, referência 2026-10-07. Corte: 2016-01-01. Horizonte: cinco anos.
+Ambiente informado: Python 3.12.14 e versões fixadas em requirements.txt.
 
-## Registro histórico — resultados locais anteriores à correção
+A massa inicial de 300 permitiu a execução, mas apenas três óbitos no teste,
+um até cinco anos, impediram calibração/subgrupos. O volume foi aumentado
+conforme a recomendação já documentada pelo Passo 1. Seed, referência,
+corte, horizonte, modelos e limiares permaneceram iguais; não houve busca
+por seed ou ajuste de parâmetros para fazer RSF vencer.
 
-Os resultados publicados em 10/09 foram reproduzidos com o gerador local antigo.
-O log e o CSV originais não estavam disponíveis; por isso a evidência identifica
-fortemente a massa local, sem auditar historicamente o comando executado. Os
-números **não devem ser atribuídos à extração oficial do Passo 1**.
+~~~bash
+python main.py --data-referencia 2026-10-07 \
+  --identificacao-fonte "Passo1_N3000_seed42_ref2026-10-07" \
+  --data-corte 2016-01-01 --horizonte 5 --sobrescrever
+~~~
 
-| Resultado antigo | Valor | Interpretação correta |
-|---|---:|---|
-| Participantes / óbitos | 300 / 9 | Massa local antiga, seed 42, referência 31/08/2026 |
-| KM em 5 / 10 anos | 0,9800 / 0,9744 | Descrição daquela massa |
-| Log-rank por sexo | p=0,9244 | Não detectou diferença; poder limitado |
-| Cox C-index | 0,7389 | No próprio treino, não validação |
-| Cox AIC parcial | 98,77 | Ajuste, não calibração |
-| RSF C-index treino / teste | 0,9881 / 0,5660 | Split aleatório 70/30, diferente da avaliação do Cox |
-| RSF IBS | 0,0227 | Erro probabilístico, não medida exclusiva de calibração |
-| Comparação chamada temporal | Cox 0,4033 / RSF 0,4881 | Inválida: ordenação por duração e risco do Cox invertido |
+O README documenta a carga local e o consumo. Uma execução produz dataset,
+KM, Cox, RSF, dependências, validação temporal/subgrupos, modelos, previsões,
+cards e manifesto em `data/resultado/`, sem logs ou rodadas versionados.
 
-As médias dos folds publicados não foram reproduzidas exatamente na revisão;
-sem versões/saída original, a divergência permanece aberta. A decisão escrita
-mantinha Cox enquanto a função antiga promoveria RSF com esses valores. Essa
-comparação foi substituída. Ausência de significância em Schoenfeld não confirma
-riscos proporcionais. A fração censurada não é uma probabilidade de sobrevivência
-em qualquer horizonte. O código antigo e os registros completos permanecem no
-histórico Git, sem reescrita dos commits do colega.
+## Resultado no Postgres
 
-## Rodada de verificação do software — 12/09/2026
+Execução informada pelo autor: 2026-10-07T16:45:31–16:45:37Z.
+Foram conferidos os JSONs de fechamento, avaliação e padrão de mortalidade,
+e o CSV de motivos de exclusão enviados pelo autor. As cinco etapas
+terminaram; os critérios automáticos produziram as evidências exigidas.
+2.960 registros extraídos, 2.937 analíticos e 140 óbitos; treino/teste
+1.916/1.021 participantes e 40/20 óbitos. Há 14 óbitos até cinco anos no teste.
 
-**Finalidade: testar a implementação, não validar cientificamente a massa da tribo.**
+Cox foi mantido, com C-index 0,62320, Brier 0,01571 e IBS 0,00945 no teste.
+RSF: 0,47862, 0,01621 e 0,00965, respectivamente; sem ganho conjunto.
+Todas as 22 avaliações por subgrupo produziram as métricas exigidas pelo
+código. Não houve alerta de correlação alta ou violação PH no treino.
+Idade/sexo tiveram direção esperada em KM/Cox descritivo. O model card
+registra coeficientes, calibração e limites da interpretação.
 
-| Campo | Valor |
-|---|---|
-| Fonte | Fixture sintética local revisada, independente do Passo 1 |
-| Quantidade / seed / referência | 2.000 / 42 / 2026-08-31 |
-| Óbitos totais / exclusões | 103 / 0 |
-| Corte de ingresso | 2016-01-01, com desfechos de treino censurados nessa data |
-| Horizonte | 5 anos |
-| Treino / teste | 989 / 1.011 participantes |
-| Óbitos treino após corte / teste | 27 / 52 |
-| Óbitos teste até 5 anos / acompanhados até 5 anos | 44 / 369 |
-| Covariáveis | idade_ingresso, sexo_M, plano_BD, plano_CD, submassa_A, submassa_B |
-| Cox | penalizer=0,01 |
-| RSF | 100 árvores, split=10, leaf=5, max_features=sqrt, seed=42 |
-| Bootstrap | 200 reamostragens pareadas válidas de 200 |
+## Conferência das exclusões
 
-| Métrica no mesmo teste | Cox PH | RSF |
-|---|---:|---:|
-| C-index | 0,514269 | 0,483166 |
-| C-index treino (diagnóstico) | 0,577844 | 0,971513 |
-| Brier aos 5 anos | 0,046449 | 0,047606 |
-| IBS na grade comum registrada | 0,033995 | 0,034457 |
-| Probabilidade média prevista de óbito em 5 anos | 0,013926 | 0,017350 |
-| Probabilidade observada por KM em 5 anos | 0,055916 | 0,055916 |
-| Erro absoluto de calibração global | 0,041990 | 0,038566 |
+23 registros (0,78% dos extraídos) permaneceram excluídos:
 
-IC95% observado por KM: [0,041455; 0,075219]. IC95% bootstrap do ganho de C-index
-(RSF − Cox): [−0,125813; 0,059258]. IC95% da redução de erro de calibração
-(Cox − RSF): [0,001472; 0,005364].
+| Motivo principal, sem contar a mesma pessoa duas vezes | Registros |
+|---|---:|
+| Desligamento anterior ao ingresso e duração não positiva | 13 |
+| Óbito e desligamento anteriores ao ingresso e duração não positiva | 4 |
+| Exposição oficial ausente | 5 |
+| Status óbito sem data de óbito | 1 |
+| Total | 23 |
 
-**Veredito automatizado: `sem_ganho_conjunto`; Cox mantido como baseline.** RSF
-não atingiu os limiares conjuntos. Estes valores servem para verificar o código,
-não para escolher o modelo da rodada oficial. Schoenfeld no treino dessa fixture
-sinalizou sexo_M (p=0,0223); a sinalização é registrada, não ocultada.
+Os motivos registrados justificam excluir esses registros para este modelo;
+não se imputaram datas/exposições nem se reinseriram linhas. Esta conferência
+revisa a auditoria recebida, sem reconsultar os registros brutos no banco do
+autor. A base analítica registra zero exposições ausentes e zero diferenças
+acima de 0,03 ano.
 
-A fixture local padrão de 300 registros gerou 12 óbitos. Com corte em 2010-01-01,
-o fluxo retornou `inconclusivo` por menos de dois eventos no treino após censura,
-sem tentar inventar uma métrica. A fixture foi corrigida e não reproduz mais a
-sequência aleatória nem a distribuição de ingresso do gerador local antigo.
+Hashes SHA-256 da rodada revisada:
 
-### Comandos reproduzíveis
+- Dataset: `6c97afdd1bf93f930901414bbc6c15946e87125fcd5a6840fc4d3e05f5d481f3`.
+- Auditoria de exclusões: `5900c846020ec61a0956b3924e7f5e43be875827bc0fec4b7370cfbbc823df73`.
+- Extração bruta: `df402d7a01dc91f42329e48a33525c38f4ae816d637dfbf4db0f2ab948230b96`.
 
-Dentro de `survival-analysis/`, após instalar `requirements.txt`:
+`fechamento.json` mantém `revisao_necessaria` porque qualquer exclusão gera
+um alerta automático. Para esta rodada, a revisão dos motivos foi registrada
+acima. Isso não apaga a auditoria nem aprova exclusões de futuras cargas.
+O programa não emite parecer humano de merge ou gate T6.
 
-```bash
-python -m unittest discover -s tests -v
-python scripts/construir_dataset.py --fonte local --data-referencia 2026-08-31 --n-participantes 2000 --saida data/teste_integracao/dataset_survival.csv
-python scripts/kaplan_meier.py --dataset data/teste_integracao/dataset_survival.csv
-python scripts/cox_ph.py --dataset data/teste_integracao/dataset_survival.csv
-python scripts/comparar_modelos.py --dataset data/teste_integracao/dataset_survival.csv --data-corte 2016-01-01 --horizonte 5
-```
+## Validação do software e entrega
 
-Ambiente: Python 3.12; lifelines 0.30.0; scikit-survival 0.25.0; scikit-learn 1.6.1;
-NumPy 2.2.6; pandas 2.2.3; SciPy 1.15.3; matplotlib 3.10.3; psycopg2-binary 2.9.10.
-As dependências foram fixadas após detectar incompatibilidade do IBS entre
-scikit-survival 0.25.0 e NumPy 2.5.3 (`np.trapz` removido).
+Comando: `python -m unittest discover -s tests -v`.
+Nesta revisão: 47 testes, 45 aprovados e dois de Postgres pulados por falta
+de servidor neste ambiente; os testes incluem a correção das mensagens.
+Os testes controlados substituem somente a consulta SQL; modelos, métricas,
+persistência, gráficos e leitura dos bundles são reais. Incluem censura,
+contratos, exposição, integridade, previsões e preservação de arquivos ao
+sobrescrever. Os dois testes opcionais de Postgres exigem servidor acessível:
 
-Os manifestos de execução registram hashes do dataset e dos scripts, versões e
-estado do Git, permitindo distinguir uma execução feita antes do commit final.
+~~~bash
+PASSO2_TESTAR_POSTGRES=1 DATA_REFERENCIA=2026-10-07 \
+  python -m unittest discover -s tests -v
+~~~
 
-## Como registrar a rodada oficial
+A execução real acima é evidência de uso do Postgres; não foi recebido nesta
+conferência o resumo final da suíte no computador do autor. O workflow usa
+Postgres 16 e a carga de 3.000, testa o fluxo e exige suporte dos critérios.
+Seu resultado no GitHub ainda precisa ser observado após o push.
 
-Ao disponibilizar o banco, executar os comandos do README, inspecionar
-`dataset_survival.exclusoes.csv` e o diagnóstico de exposição e adicionar uma
-rodada abaixo, sem substituir resultados locais por números sem procedência.
-Registrar identificação/commit do Passo 1, referência, hash, contagens, exclusões,
-corte, horizonte, suporte por grupo, métricas, veredito e limitações. O JSON gerado
-é a fonte dos números e já contém as versões dos scripts/bibliotecas.
+A rodada recebida registra SHA `9cfef9327e8f30410c495c18ad7eb7a293d208fc`
+e alterações locais, pois a correção de exposição ainda não estava commitada.
+Os hashes dos scripts recebidos foram comparados com o código desta revisão.
+Os ajustes finais de mensagens/documentação não alteram treino ou métricas.
 
-Não aumentar artificialmente a taxa de óbitos nem procurar cortes favoráveis
-para fazer o challenger passar. Se os eventos forem insuficientes, registrar
-essa limitação. Riscos competitivos não são requisito desta entrega.
+Saídas e bundles permanecem na versão 0.2.1. A única entrada é `main.py`.
+Modelos temporais, dados, covariáveis em ordem, previsões, métricas e manifesto
+estão prontos para o consumo descrito no README. SHAP/ALE (#53) e
+ensemble/CVaR (#54) são implementações dos consumidores. Revisão técnica e
+T6 seguem a governança. Não se declara validação em população real.
 
-**A estimativa individual é insumo analítico para risco coletivo, nunca decisão
-automática sobre direitos individuais.**
+A revisão altera apenas survival-analysis e seu workflow; nenhum arquivo
+do gerador, migrations, curadoria ou módulos das outras duplas é alterado.
+
+**A estimativa individual é insumo para gestão de risco coletivo, nunca decisão automática sobre direitos individuais.**

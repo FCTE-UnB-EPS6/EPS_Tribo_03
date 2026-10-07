@@ -1,52 +1,11 @@
-"""
-Random Survival Forest — Challenger (Passo 2)
-
-Treina um Random Survival Forest (scikit-survival) como modelo challenger
-para comparação com o baseline Cox PH. Só será adotado se apresentar
-ganhos conjuntos de discriminação e calibração no comparador temporal.
-Este script isolado mantém o split aleatório apenas como diagnóstico exploratório.
-
-Uso:
-    python scripts/survival_forest.py
-    python scripts/survival_forest.py --dataset data/dataset_survival.csv
-"""
-
-import argparse
+"""Challenger RSF e diagnósticos do holdout temporal, chamados por main.py."""
 import os
-import sys
-
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from sksurv.ensemble import RandomSurvivalForest
-from sksurv.metrics import concordance_index_censored, integrated_brier_score
 from sklearn.inspection import permutation_importance
-from sklearn.model_selection import train_test_split
-
-
-def carregar_dataset(caminho):
-    if not os.path.exists(caminho):
-        print(f"Dataset não encontrado em {caminho}")
-        print("Rode primeiro: python scripts/construir_dataset.py")
-        sys.exit(1)
-    return pd.read_csv(caminho)
-
-
-def preparar_dados(df, covariaveis, seed=42):
-    """Prepara dados no formato exigido pelo scikit-survival."""
-    X = df[covariaveis].values
-    y = np.array(
-        [(bool(e), t) for e, t in zip(df["evento"], df["tempo_observado"])],
-        dtype=[("evento", bool), ("tempo", float)],
-    )
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, random_state=seed, stratify=df["evento"]
-    )
-
-    return X_train, X_test, y_train, y_test
 
 
 def treinar_rsf(X_train, y_train, seed=42):
@@ -61,42 +20,6 @@ def treinar_rsf(X_train, y_train, seed=42):
     )
     rsf.fit(X_train, y_train)
     return rsf
-
-
-def calcular_metricas(rsf, X_train, X_test, y_train, y_test):
-    """Calcula C-index e Integrated Brier Score."""
-    pred_test = rsf.predict(X_test)
-    c_index = concordance_index_censored(
-        y_test["evento"], y_test["tempo"], pred_test
-    )[0]
-
-    pred_train = rsf.predict(X_train)
-    c_index_train = concordance_index_censored(
-        y_train["evento"], y_train["tempo"], pred_train
-    )[0]
-
-    ibs = None
-    ibs_motivo = None
-    try:
-        tempos_eval = np.percentile(
-            y_test["tempo"][y_test["evento"]], np.arange(10, 91, 10)
-        )
-        if len(tempos_eval) >= 2:
-            surv_funcs = rsf.predict_survival_function(X_test)
-            preds = np.vstack([fn(tempos_eval) for fn in surv_funcs])
-            ibs = integrated_brier_score(y_train, y_test, preds, tempos_eval)
-    except (ValueError, IndexError) as exc:
-        ibs_motivo = str(exc)
-        print(f"IBS indisponível: {ibs_motivo}")
-
-    if ibs is None and ibs_motivo is None:
-        ibs_motivo = "Grade de avaliação insuficiente"
-    return {
-        "ibs_motivo": ibs_motivo,
-        "c_index_test": c_index,
-        "c_index_train": c_index_train,
-        "ibs": ibs,
-    }
 
 
 def importancia_variaveis(rsf, covariaveis, X_test, y_test, saida_dir):
@@ -138,74 +61,3 @@ def curva_sobrevivencia_exemplo(rsf, X_test, y_test, saida_dir):
     fig.tight_layout()
     fig.savefig(os.path.join(saida_dir, "rsf_curvas_individuais.png"), dpi=150)
     plt.close(fig)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Random Survival Forest challenger")
-    parser.add_argument("--dataset", default=None)
-    parser.add_argument("--saida", default=None)
-    parser.add_argument("--seed", type=int, default=42)
-    args = parser.parse_args()
-
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    dataset_path = args.dataset or os.path.join(base_dir, "data", "dataset_survival.csv")
-    saida_dir = args.saida or os.path.join(os.path.dirname(dataset_path), "graficos_rsf_exploratorio")
-    os.makedirs(saida_dir, exist_ok=True)
-
-    df = carregar_dataset(dataset_path)
-    print("Split ALEATÓRIO exploratório; decisão de modelo somente em comparar_modelos.py.")
-    print(f"Dataset carregado: {len(df)} registros, {df['evento'].sum()} eventos\n")
-
-    covariaveis = ["idade_ingresso", "sexo_M", "plano_BD", "plano_CD",
-                    "submassa_A", "submassa_B"]
-
-    X_train, X_test, y_train, y_test = preparar_dados(df, covariaveis, args.seed)
-    print(f"Treino: {len(X_train)} | Teste: {len(X_test)}")
-    print(f"Eventos treino: {y_train['evento'].sum()} | Eventos teste: {y_test['evento'].sum()}")
-
-    print("\nTreinando Random Survival Forest...")
-    rsf = treinar_rsf(X_train, y_train, args.seed)
-
-    metricas = calcular_metricas(rsf, X_train, X_test, y_train, y_test)
-
-    print("\n" + "=" * 60)
-    print("RANDOM SURVIVAL FOREST — RESUMO")
-    print("=" * 60)
-    print(f"C-index (teste):  {metricas['c_index_test']:.4f}")
-    print(f"C-index (treino): {metricas['c_index_train']:.4f}")
-    if metricas["ibs"] is not None:
-        print(f"Integrated Brier Score: {metricas['ibs']:.4f}")
-
-    overfit = metricas["c_index_train"] - metricas["c_index_test"]
-    if overfit > 0.05:
-        print(f"\n⚠️  Possível overfitting: diferença treino-teste = {overfit:.4f}")
-    else:
-        print(f"\n✅ Diferença treino-teste aceitável: {overfit:.4f}")
-
-    print("\nImportância das variáveis:")
-    imp = importancia_variaveis(rsf, covariaveis, X_test, y_test, saida_dir)
-    for nome, valor in imp:
-        print(f"  {nome}: {valor:.4f}")
-
-    curva_sobrevivencia_exemplo(rsf, X_test, y_test, saida_dir)
-
-    metricas_path = os.path.join(os.path.dirname(dataset_path), "metricas_rsf_exploratorio.csv")
-    pd.DataFrame([{
-        "modelo": "Random Survival Forest",
-        "c_index_test": metricas["c_index_test"],
-        "c_index_train": metricas["c_index_train"],
-        "ibs": metricas["ibs"],
-        "ibs_motivo": metricas["ibs_motivo"],
-        "desenho": "aleatorio_exploratorio",
-        "n_estimators": 100,
-        "n_covariaveis": len(covariaveis),
-        "n_treino": len(X_train),
-        "n_teste": len(X_test),
-        "n_eventos_teste": int(y_test["evento"].sum()),
-    }]).to_csv(metricas_path, index=False)
-    print(f"\nMétricas salvas em {metricas_path}")
-    print(f"Gráficos salvos em {saida_dir}/")
-
-
-if __name__ == "__main__":
-    main()

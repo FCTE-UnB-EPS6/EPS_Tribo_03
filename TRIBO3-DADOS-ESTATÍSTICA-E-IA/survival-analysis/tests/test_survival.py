@@ -7,12 +7,12 @@ import unittest
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
-from construir_dataset import construir_dataset_analitico, gerar_dados_locais
-from avaliacao import (alvo, c_index, calibracao_km, dividir_temporal, grade_comum,
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.construir_dataset import construir_dataset_analitico, gerar_dados_locais
+from scripts.avaliacao import (alvo, c_index, calibracao_km, dividir_temporal, grade_comum,
                        metricas_modelo)
-from comparar_modelos import imprimir_veredito, validacao_temporal
-from kaplan_meier import resumo_grupos
+from scripts.comparar_modelos import imprimir_veredito, validacao_temporal
+from scripts.kaplan_meier import resumo_grupos
 
 
 def pessoa(**changes):
@@ -26,6 +26,23 @@ def pessoa(**changes):
 class DatasetTest(unittest.TestCase):
     def build(self, **changes):
         return construir_dataset_analitico(pd.DataFrame([pessoa(**changes)]), date(2026, 8, 31), True)
+
+    def test_missing_official_exposure_is_excluded_and_audited(self):
+        bruto = pd.DataFrame([
+            pessoa(participante_id='com-exposicao', exposicao_oficial_anos=10.),
+            pessoa(participante_id='clone-sem-exposicao', exposicao_oficial_anos=None)])
+        df, exclusoes = construir_dataset_analitico(bruto, date(2026, 8, 31), True)
+        self.assertEqual(df.participante_id.tolist(), ['com-exposicao'])
+        self.assertEqual(exclusoes.participante_id.tolist(), ['clone-sem-exposicao'])
+        self.assertEqual(exclusoes.motivos.iloc[0], 'exposicao_oficial_ausente')
+        self.assertTrue(pd.isna(bruto.exposicao_oficial_anos.iloc[1]))
+
+    def test_invalid_official_exposure_is_not_imputed(self):
+        for valor in [0., -1., float('inf'), float('-inf'), 'invalida']:
+            with self.subTest(exposicao=valor):
+                df, exclusoes = self.build(exposicao_oficial_anos=valor)
+                self.assertTrue(df.empty)
+                self.assertIn('exposicao_oficial_invalida', exclusoes.motivos.iloc[0])
 
     def test_future_death_is_censored_at_reference(self):
         df, ex = self.build(status_atual='obito', data_obito='2027-01-01', data_desligamento='2027-01-01')
@@ -142,7 +159,7 @@ class EvaluationTest(unittest.TestCase):
         rows, tests = resumo_grupos(df)
         self.assertEqual({r['grupo'] for r in rows if r['fator']=='plano_tipo'}, {'BD', 'CD', 'CV'})
         self.assertEqual({r['grupo'] for r in rows if r['fator']=='submassa'}, {'Plano A', 'Plano B', 'Plano C'})
-        self.assertEqual({r['fator'] for r in tests}, {'sexo', 'plano_tipo', 'submassa'})
+        self.assertEqual({r['fator'] for r in tests}, {'sexo', 'plano_tipo', 'submassa', 'faixa_idade_ingresso'})
 
 
 if __name__ == '__main__':

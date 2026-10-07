@@ -1,18 +1,5 @@
-"""
-Cox Proportional Hazards — Baseline semi-paramétrico (Passo 2)
-
-Ajusta um modelo de Cox usando as covariáveis do dataset analítico,
-verifica a hipótese de riscos proporcionais (Schoenfeld) e calcula
-o concordance index (C-index) como métrica de discriminação.
-
-Uso:
-    python scripts/cox_ph.py
-    python scripts/cox_ph.py --dataset data/dataset_survival.csv
-"""
-
-import argparse
+"""Baseline Cox PH: ajuste, Schoenfeld e gráficos; chamado por main.py."""
 import os
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -20,14 +7,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from lifelines import CoxPHFitter
 from lifelines.statistics import proportional_hazard_test
-
-
-def carregar_dataset(caminho):
-    if not os.path.exists(caminho):
-        print(f"Dataset não encontrado em {caminho}")
-        print("Rode primeiro: python scripts/construir_dataset.py")
-        sys.exit(1)
-    return pd.read_csv(caminho)
 
 
 def verificar_multicolinearidade(df, covariaveis):
@@ -139,6 +118,9 @@ def gerar_graficos(cph, saida_dir):
     fig.savefig(os.path.join(saida_dir, "cox_hazard_ratios.png"), dpi=150)
     plt.close(fig)
 
+    if 'idade_ingresso' not in cph.params_.index:
+        return  # Idade constante foi removida; não inventar um efeito estimado.
+
     fig, ax = plt.subplots(figsize=(10, 6))
     cph.plot_partial_effects_on_outcome(
         covariates="idade_ingresso",
@@ -152,50 +134,3 @@ def gerar_graficos(cph, saida_dir):
     fig.tight_layout()
     fig.savefig(os.path.join(saida_dir, "cox_efeito_idade.png"), dpi=150)
     plt.close(fig)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Cox Proportional Hazards baseline")
-    parser.add_argument("--dataset", default=None)
-    parser.add_argument("--saida", default=None)
-    args = parser.parse_args()
-
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    dataset_path = args.dataset or os.path.join(base_dir, "data", "dataset_survival.csv")
-    saida_dir = args.saida or os.path.join(os.path.dirname(dataset_path), "graficos")
-
-    df = carregar_dataset(dataset_path)
-    print("Ajuste descritivo completo. Para calibração e teste temporal use comparar_modelos.py.")
-    print(f"Dataset carregado: {len(df)} registros, {df['evento'].sum()} eventos\n")
-
-    todas_covariaveis = selecionar_covariaveis()
-    corr, pares_altos = verificar_multicolinearidade(df, todas_covariaveis)
-
-    covariaveis = [c for c in selecionar_covariaveis() if df[c].nunique() > 1]
-    print(f"\nCovariáveis selecionadas para o modelo: {covariaveis}")
-
-    cph = ajustar_cox(df, covariaveis)
-    imprimir_resumo(cph, df)
-
-    verificar_proporcionalidade(cph, df, covariaveis)
-
-    gerar_graficos(cph, saida_dir)
-    print(f"\nGráficos salvos em {saida_dir}/")
-
-    metricas_path = os.path.join(os.path.dirname(dataset_path), "metricas_cox_treino.csv")
-    coefs = cph.summary
-    metricas = pd.DataFrame([{
-        "modelo": "Cox PH",
-        "c_index_treino": cph.concordance_index_,
-        "aic_parcial": cph.AIC_partial_,
-        "n_covariaveis": len(covariaveis),
-        "n_significativas_005": int((coefs["p"] < 0.05).sum()),
-        "n_registros": len(df),
-        "n_eventos": int(df["evento"].sum()),
-    }])
-    metricas.to_csv(metricas_path, index=False)
-    print(f"Métricas salvas em {metricas_path}")
-
-
-if __name__ == "__main__":
-    main()
