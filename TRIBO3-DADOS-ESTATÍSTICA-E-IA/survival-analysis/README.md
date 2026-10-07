@@ -1,111 +1,184 @@
-# Passo 2 — Modelo Individual de Sobrevivência
+# Modelo individual de sobrevivência — SL-02
 
-**Dupla responsável:** Caio Brandão Santos e Pedro Lucas Figueiredo Santana  
-**Bloco do escopo:** Multiestado e survival analytics (§6)
+Responsáveis: Caio Brandão Santos (@caiobsantos) e Pedro Lucas Figueiredo Santana (@pedrolucas12).
+[Issue #34](https://github.com/FCTE-UnB-EPS6/estudos-populacionais/issues/34).
 
-O MVP estima sobrevivência até óbito desde o ingresso usando idade ao ingresso,
-sexo, tipo de plano e submassa. Kaplan-Meier descreve a massa; Cox é o baseline
-e Random Survival Forest (RSF) é o challenger. Aposentadoria e invalidez não
-encerram o acompanhamento. Desligamento anterior ao óbito e a data de referência
-censuram o acompanhamento. Riscos competitivos estão fora desta entrega.
+`main.py` é a única entrada da aplicação. Ela consulta as tabelas finais do
+Passo 1 no Postgres, prepara o dataset, roda Kaplan-Meier, Cox e Random Survival
+Forest, avalia os modelos e salva os resultados. Não escreve no banco.
 
-## Fonte e dependência do Passo 1
+**A estimativa individual é insumo para gestão de risco coletivo, nunca decisão automática sobre direitos individuais.**
 
-A execução oficial lê as tabelas **finais e curadas** do Postgres do Passo 1.
-O banco pode ser iniciado em outra cópia/branch `feat/ambiente-de-dados`, seguindo
-o README de `ambiente-de-dados/`. Não é necessário mesclar o gerador nessa branch.
-Alinhar com a dupla do Passo 1 a versão, lote, seed, quantidade e referência.
+## Executar no banco do Passo 1
 
-A consulta seleciona o snapshot atual por participante, agrega óbitos e agrega
-exposições **antes** da junção, preservando uma linha por pessoa. A duração é
-calculada pelas datas; a soma de `exposicao.tempo_exposto` é guardada para auditoria.
-Ela usa dias inclusivos/teto anual e pode diferir da duração contínua. Diferenças
-acima de 0,03 ano e ausência de exposição são contadas no manifesto, para inspeção.
-Não há alteração automática das datas com base nessa soma.
+Primeiro, o Passo 1 precisa ter concluído a promoção de staging para as tabelas
+finais. Reiniciar um contêiner não atualiza uma carga antiga. Use a mesma data
+de referência que foi usada para gerar a carga; não escolha outra data para
+melhorar as métricas.
 
-`--fonte banco` é o padrão e **nunca recorre ao gerador local se falhar**.
-`--fonte local` é uma fixture independente para desenvolvimento, não reproduz o
-pipeline oficial. Por padrão, seus arquivos ficam em `data/local/`.
+Na pasta `survival-analysis`, ative o ambiente já existente:
 
-## Execução oficial
-
-Na raiz do repositório:
-
-```bash
-cd survival-analysis
-python -m venv .venv
+~~~bash
 source .venv/bin/activate
-pip install -r requirements.txt
-```
+python -m pip install -r requirements.txt
+~~~
 
-Conexão via `PGHOST`, `PGPORT`, `POSTGRES_DB`, `POSTGRES_USER` e `POSTGRES_PASSWORD`
-(mesmos defaults de desenvolvimento do Passo 1; porta 5433). O script não carrega
-`.env` automaticamente: exporte as variáveis se o ambiente usar outros valores.
+Se ainda não houver ambiente, crie-o com `python3.12 -m venv .venv`.
+No PowerShell, a ativação é `.venv\Scripts\Activate.ps1`.
 
-Exemplo de rodada — **substitua a identificação, referência e corte pelos valores
-alinhados com o grupo antes de avaliar os resultados**. O corte e o horizonte
-não devem ser escolhidos procurando melhorar o desempenho de teste.
+Para reproduzir a avaliação registrada nos cards, use a carga do Passo 1
+com `N_PARTICIPANTES=3000`, `SEED=42` e `DATA_REFERENCIA=2026-10-07`.
+O próprio dataset card do Passo 1 recomenda aumentar o volume para análises
+atuariais. O lote de 300 é útil para qualidade de dados, mas nesta avaliação
+não deu suporte para calibração/subgrupos. O aumento foi decidido por falta
+de eventos, mantendo seed, referência, corte, horizonte e limiares.
 
-```bash
-python scripts/construir_dataset.py --fonte banco --data-referencia 2026-08-31 --identificacao-fonte "SUBSTITUIR: commit do Passo 1 e lote/seed/n da rodada"
-python scripts/kaplan_meier.py
-python scripts/cox_ph.py
-python scripts/comparar_modelos.py --data-corte 2016-01-01 --horizonte 5
-```
+Se o banco sintético local puder ser apagado, na pasta `ambiente-de-dados`
+use o mesmo projeto Compose que criou o contêiner existente. Os comandos
+abaixo substituem os volumes locais desse projeto; não modificam o código
+nem o banco de colegas. Execute um por vez e pare em caso de erro.
 
-`cox_ph.py` ajusta a massa completa apenas para descrição (HR, Schoenfeld e
-C-index **de treino**). `comparar_modelos.py` refaz o Cox e o RSF no mesmo treino
-para calcular discriminação e calibração no teste; é a avaliação de referência.
-`survival_forest.py` continua disponível como diagnóstico aleatório exploratório,
-sem função de escolher o modelo, e não é necessário executá-lo no fluxo oficial.
+~~~bash
+export COMPOSE_PROJECT_NAME="$(docker inspect tribo3-db --format '{{ index .Config.Labels "com.docker.compose.project" }}')"
+docker compose down -v
+docker compose up -d db
+docker compose run --rm migrate
+docker compose build seed
+docker compose run --rm --no-deps \
+  -e N_PARTICIPANTES=3000 -e SEED=42 -e DATA_REFERENCIA=2026-10-07 \
+  -v "$PWD/docs/referencias:/docs/referencias:ro" seed
+~~~
 
-## Saídas e rastreabilidade
+A montagem disponibiliza as tábuas ao contêiner sem editar o Compose do
+Passo 1. Se a carga acima já foi realizada, use o banco existente.
+De volta à pasta `survival-analysis`, execute:
 
-- `data/dataset_survival.csv`: IDs, datas, categorias originais, dummies e fonte.
-- `dataset_survival.bruto.csv`, `.exclusoes.csv` e `.metadata.json`: extração,
-  motivos por participante, identificação declarada do lote, hashes, comando,
-  versões e contagens. Nenhuma senha é registrada.
-- `data/graficos/`: KM e log-rank por sexo, BD/CD/CV e Plano A/B/C, com contagens.
-- `data/metricas_cox_treino.csv`: métricas aparentes, não usadas para promoção.
-- `data/avaliacao/resultado.json`: procedência, corte, grade, métricas dos dois
-  modelos, motivos de indisponibilidade, critérios e veredito.
-- `data/avaliacao/divisao_temporal.csv`: IDs, datas e desfechos efetivamente usados
-  em cada conjunto, inclusive a censura de treino no corte.
-- `data/avaliacao/calibracao.csv`, `calibracao.png` e `metricas_subgrupos.csv`:
-  calibração previsto versus KM por grupos de risco e avaliação por sexo, plano,
-  submassa e faixas de idade no ingresso.
+~~~bash
+python main.py \
+  --data-referencia 2026-10-07 \
+  --identificacao-fonte "Passo1_N3000_seed42_ref2026-10-07" \
+  --data-corte 2016-01-01 \
+  --horizonte 5
+~~~
 
-`--saida` no comparador permite outro diretório de rodada. Não reutilize o mesmo
-diretório para experimentos que precisem ser preservados. Os dados e resultados
-gerados não são versionados automaticamente; registre a rodada aprovada nos
-[documentos do experimento](docs/experiment_record.md) e no [model card](docs/model_card.md).
+A saída padrão é `data/resultado/`, ignorada pelo Git. Todas as validações
+acontecem nesse comando; não há scripts separados de treinamento a executar.
+Use `--saida CAMINHO` se precisar guardar outra execução.
 
-## Desenho da avaliação
+Para repetir na mesma pasta, acrescente `--sobrescrever`. Essa opção substitui
+somente uma pasta de resultados concluídos, reconhecida pelo manifesto, e
+recusa arquivos adicionais ou um snapshot de entrada dentro da mesma pasta.
+Ela não apaga outras pastas de dados nem modifica o Postgres.
 
-Treino = ingresso anterior ao corte, com desfechos posteriores **censurados no
-corte**. Teste = ingresso no corte ou depois, acompanhado até evento/saída/referência.
-O cadastro é o snapshot atual extraído, portanto essa simulação por calendário
-não reconstitui integralmente o conhecimento bitemporal disponível naquela época.
+A conexão padrão é `localhost:5433`, banco/usuário `tribo3` e senha local
+`tribo3_dev`. Se seu Compose usa valores diferentes, configure `PGHOST`,
+`PGPORT`, `POSTGRES_DB`, `POSTGRES_USER` e `POSTGRES_PASSWORD` no terminal.
+A aplicação não carrega um arquivo `.env` automaticamente.
 
-C-index usa risco positivo no Cox. Brier/IBS usam as mesmas pessoas, grade e pesos
-IPCW estimados no treino. Calibração direta compara probabilidade média prevista
-de óbito com `1 − KM(horizonte)` e fornece IC95% observado e curvas por tercis de
-risco. Essa medida global não é ICI; não detecta todos os erros individuais.
+## Conferir os resultados
 
-Métrica sem suporte vem com motivo, não com zero. Nenhum modelo é promovido por
-falta de evidência. Os critérios completos e limites estão no model card.
+Comece por `data/resultado/fechamento.json`. Ele registra as etapas executadas,
+os cinco critérios da issue #34, o ambiente e as limitações encontradas.
 
-## Verificação automatizada
+| Saída | Conteúdo |
+|---|---|
+| `dataset_survival.csv` e arquivos associados | Dataset, procedência, extração bruta e exclusões justificadas |
+| `km/` | Curvas KM por sexo, idade, plano e submassa; log-rank |
+| `avaliacao/resultado.json` | Discriminação, calibração, Brier/IBS, parâmetros e comparação Cox/RSF |
+| `avaliacao/metricas_subgrupos.csv` | Métricas e motivos de insuficiência por grupo |
+| `avaliacao/dependencia_covariaveis.json` | Pearson, Spearman, Cramér V e decisões por covariável |
+| `avaliacao/divisao_temporal.csv` | Participantes de treino/teste e desfechos censurados no corte |
+| `avaliacao/modelos/` | Cox/RSF treinados e estimativas individuais no teste |
+| `cox_descritivo/` e `padrao_mortalidade.json` | Coeficientes, Schoenfeld e checagem de idade/sexo na massa completa |
+| `model_card.md` e `experiment_record.md` | Cards preenchidos automaticamente com os números dessa execução |
+| `manifesto_artefatos.json` | Versão e hashes das saídas para conferir integridade |
 
-```bash
+Código 0 significa execução sem alertas automáticos; código 2 **com fechamento**
+significa execução concluída com alertas para revisão. Exclusões também
+produzem esse código: após conferir os motivos, registre a revisão no
+experiment record, vinculada ao hash do dataset e da auditoria. Um alerta
+não implica falha de execução ou necessidade de reinserir registros.
+Código 1 indica falha de execução,
+registrada em `falha_execucao.json`, com o erro exibido no terminal. Erro de
+argumentos também retorna 2, mas não produz um fechamento.
+
+Os limiares são definidos no código e permanecem fixos. Poucos óbitos podem
+impedir métricas por grupo ou a confirmação de idade/sexo. Isso é registrado
+explicitamente. Não se altera seed, corte, horizonte ou limiar para produzir
+uma aprovação. RSF não precisa superar Cox para que a comparação seja executada.
+
+## Testar
+
+~~~bash
 python -m unittest discover -s tests -v
-python scripts/construir_dataset.py --fonte local --data-referencia 2026-08-31 --n-participantes 2000 --saida data/teste_integracao/dataset_survival.csv
-python scripts/kaplan_meier.py --dataset data/teste_integracao/dataset_survival.csv
-python scripts/comparar_modelos.py --dataset data/teste_integracao/dataset_survival.csv --data-corte 2016-01-01 --horizonte 5
-```
+~~~
 
-Os 2.000 registros são uma fixture de teste do software, não substituem a massa
-da tribo nem recomendam alterar a taxa de óbitos do gerador oficial.
+Para incluir o contrato e o fluxo completo no seu Postgres carregado:
 
-**A estimativa individual é insumo analítico para gestão de risco coletivo,
-nunca decisão automática sobre direitos individuais.**
+~~~bash
+PASSO2_TESTAR_POSTGRES=1 DATA_REFERENCIA=2026-10-07 \
+  python -m unittest discover -s tests -v
+~~~
+
+Os testes de Postgres são somente leitura e usam uma pasta temporária para
+os resultados, removida ao terminar. Não criam outro banco no seu Docker.
+Os demais testes usam dados controlados; a consulta é substituída, mas os
+ajustes KM/Cox/RSF, cálculos, gráficos e arquivos de modelo são executados.
+
+O workflow `Modelo de sobrevivência` testa a branch com Postgres 16, aplica
+as migrations existentes, carrega o gerador e a curadoria do Passo 1 e publica
+os resultados como artefato do CI. Usa 3.000 participantes e exige
+que os critérios automáticos tenham suporte, sem emitir aceite humano.
+Ele usa um banco temporário do runner do
+GitHub, sem acessar o banco local de ninguém. O teste local não substitui o
+resultado de uma execução desse workflow.
+
+## Consumo pelos Passos 7 e 8
+
+A entrega é a pasta `data/resultado/` completa, ou o artefato `survival-SHA`
+do CI. Ela contém dados, separação temporal, modelos, previsões, métricas e
+cards. Os arquivos de execução não são adicionados automaticamente ao Git.
+
+Cada `cox.joblib`/`rsf.joblib` é um dicionário com `modelo`,
+`covariaveis` na ordem usada no treino, `versao_modelo`, `data_corte` e
+`finalidade`. Os modelos foram ajustados somente no treino temporal.
+O Cox da pasta `cox_descritivo` é uma análise separada da massa completa.
+
+~~~python
+from pathlib import Path
+import hashlib
+import json
+import joblib
+import pandas as pd
+from scripts.avaliacao import dividir_temporal
+
+pasta = Path("data/resultado")
+manifesto = json.loads((pasta / "manifesto_artefatos.json").read_text())
+arquivo = pasta / "avaliacao/modelos/cox.joblib"
+assert hashlib.sha256(arquivo.read_bytes()).hexdigest() == manifesto["arquivos"]["avaliacao/modelos/cox.joblib"]
+bundle = joblib.load(arquivo)
+dataset = pd.read_csv(pasta / "dataset_survival.csv")
+treino, teste = dividir_temporal(dataset, bundle["data_corte"])
+X = teste[bundle["covariaveis"]]
+risco = bundle["modelo"].predict_partial_hazard(X)
+~~~
+
+O RSF recebe `X.to_numpy()`; o Cox recebe DataFrame com nomes. Carregue
+joblib apenas de arquivos produzidos pela equipe e conferidos no manifesto.
+Hashes conferem integridade, não tornam um arquivo de origem desconhecida seguro.
+
+`estimativas_teste.csv` contém o ID sintético, escores de risco,
+probabilidades de óbito/sobrevivência e horizonte por modelo.
+Escores de risco não são probabilidades. Valores ausentes indicam horizonte
+sem suporte; o motivo fica no resultado JSON. A falta de suporte IPCW para
+Brier não apaga uma previsão suportada pelo modelo.
+
+A [#53](https://github.com/FCTE-UnB-EPS6/estudos-populacionais/issues/53)
+consome esses objetos para SHAP/ALE, leitura dos coeficientes e análise de
+vieses/reidentificação. A
+[#54](https://github.com/FCTE-UnB-EPS6/estudos-populacionais/issues/54)
+trata novos challengers, ensemble, CVaR e promoção após a explicabilidade.
+Essas atividades pertencem à dupla consumidora. Este módulo entrega os
+artefatos de entrada e não altera o contrato do Passo 6.
+
+[Model card](docs/model_card.md) · [Experiment record](docs/experiment_record.md)

@@ -1,6 +1,4 @@
 """Cox/RSF no mesmo corte de calendário; sem promoção com métricas ausentes."""
-import argparse
-from datetime import date
 import json
 from pathlib import Path
 
@@ -9,12 +7,14 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import joblib
 
-from avaliacao import (COVARIAVEIS, alvo, avaliar_subgrupos, c_index, calibracao_km,
-                       curvas_calibracao, dividir_temporal, grade_comum, metricas_modelo)
-from cox_ph import ajustar_cox, verificar_multicolinearidade, verificar_proporcionalidade
-from survival_forest import treinar_rsf
-from registro import ambiente, salvar_json, sha256
+from .avaliacao import (COVARIAVEIS, alvo, avaliar_subgrupos, c_index, calibracao_km,
+                       curvas_calibracao, dividir_temporal, grade_comum, metricas_modelo, SUBGRUPOS)
+from .cox_ph import ajustar_cox, verificar_multicolinearidade, verificar_proporcionalidade
+from .survival_forest import treinar_rsf, importancia_variaveis, curva_sobrevivencia_exemplo
+from .registro import ambiente, salvar_json, sha256, VERSAO_MODELO
+from .diagnosticos import diagnosticar_covariaveis
 
 LIMIAR_GANHO = .02
 LIMIAR_CALIBRACAO = .005  # redução absoluta de 0,5 ponto percentual
@@ -24,8 +24,11 @@ def imprimir_veredito(cox, rsf, n_eventos, ic_ganhos=None):
     """Ganhos em discriminação E calibração, IBS não pior e bootstrap pareado."""
     result = dict(modelo_mantido='Cox PH', status='inconclusivo', motivo=None)
     keys = ['c_index', 'ibs', 'erro_calibracao_global']
-    if any(m.get(k) is None or not np.isfinite(m[k]) for m in [cox, rsf] for k in keys):
-        result['motivo'] = 'Métricas ausentes; Cox permanece apenas como baseline por simplicidade'
+    ausentes = [f'{nome}: {k}' for nome, m in [('Cox PH', cox), ('Random Survival Forest', rsf)]
+                for k in keys if m.get(k) is None or not np.isfinite(m[k])]
+    if ausentes:
+        result['motivo'] = ('Comparação sem suporte: ' + '; '.join(ausentes) +
+                            '. Cox permanece como baseline, sem superioridade declarada.')
     elif n_eventos < 10:
         result['motivo'] = 'Menos de 10 eventos no teste; métricas exploratórias, sem promoção'
     elif not (rsf['c_index']-cox['c_index'] > LIMIAR_GANHO and
@@ -62,7 +65,9 @@ def bootstrap_ganhos(teste, riscos, probs, horizonte, seed=42, n=200):
     return out
 
 
-def validacao_temporal(df, data_corte, horizonte=5., seed=42):
+def validacao_temporal(df, data_corte, horizonte=5., seed=42, saida_modelos=None):
+    if saida_modelos is not None:
+        Path(saida_modelos).mkdir(parents=True, exist_ok=True)
     treino, teste = dividir_temporal(df, data_corte)
     result = dict(data_corte=str(data_corte), horizonte_anos=horizonte, seed=seed,
         desenho='Ingresso por calendário; desfechos de treino limitados ao corte; snapshot cadastral atual',
@@ -70,11 +75,12 @@ def validacao_temporal(df, data_corte, horizonte=5., seed=42):
         eventos_teste=int(teste.evento.sum()), modelos={}, subgrupos=[], curvas_calibracao=[])
     split = pd.concat([treino.assign(conjunto='treino'), teste.assign(conjunto='teste')])[
         ['participante_id', 'conjunto', 'data_ingresso', 'data_fim', 'tempo_observado', 'evento']]
+    result['dependencia_covariaveis'] = diagnosticar_covariaveis(treino)
     if treino.evento.sum() < 2:
         result['motivo'] = 'Menos de dois eventos no treino após censura no corte; ajuste não executado'
         result['veredito'] = imprimir_veredito({}, {}, int(teste.evento.sum()))
         return result, split
-    covs = [c for c in COVARIAVEIS if treino[c].nunique() > 1]
+    covs = result['dependencia_covariaveis']['covariaveis']
     result['covariaveis'] = covs
     result['constantes_no_treino_removidas'] = sorted(set(COVARIAVEIS)-set(covs))
     if not covs:
@@ -104,6 +110,16 @@ def validacao_temporal(df, data_corte, horizonte=5., seed=42):
         result['motivo_grade'] = str(exc)
     riscos, probs = {}, {}
     for name, model in models.items():
+        if saida_modelos is not None:
+            destino = Path(saida_modelos)
+            destino.mkdir(parents=True, exist_ok=True)
+            filename = 'cox.joblib' if name == 'Cox PH' else 'rsf.joblib'
+            joblib.dump(dict(modelo=model, covariaveis=covs, versao_modelo=VERSAO_MODELO,
+                            data_corte=str(data_corte), finalidade='modelo ajustado somente no treino'),
+                        destino/filename, compress=3)
+            result.setdefault('artefatos_modelos', {})[name] = dict(
+                arquivo=filename, sha256=sha256(destino/filename), parametros=(
+                {'penalizer': .01} if name == 'Cox PH' else model.get_params()))
         if name == 'Cox PH':
             risk = model.predict_partial_hazard(teste[covs]).to_numpy().ravel()
             train_risk = model.predict_partial_hazard(treino[covs]).to_numpy().ravel()
@@ -122,20 +138,61 @@ def validacao_temporal(df, data_corte, horizonte=5., seed=42):
             met.update(metricas_modelo(treino, teste, risk, surv, horizonte, times, yt))
             probs[name] = 1-surv[:, -1]
             met['erro_calibracao_global'] = met['calibracao']['erro_calibracao_global']
+        elif horizonte <= treino.tempo_observado.max():
+            # Estimar S(t) não depende da existência de pesos IPCW válidos para
+            # Brier. Manter a previsão quando o modelo suporta o horizonte;
+            # a impossibilidade de validar continua registrada separadamente.
+            if name == 'Cox PH':
+                sobrevivencia = model.predict_survival_function(teste[covs], times=[horizonte]).to_numpy().ravel()
+            else:
+                sobrevivencia = np.array([fn(horizonte) for fn in model.predict_survival_function(teste[covs].to_numpy())])
+            probs[name] = 1-sobrevivencia
+            met['calibracao'] = calibracao_km(teste, probs[name], horizonte)
+            met['erro_calibracao_global'] = met['calibracao']['erro_calibracao_global']
+        else:
+            met['motivo_probabilidade'] = 'Horizonte excede acompanhamento do treino; nenhuma extrapolação'
+        if name in probs:
+            if not np.isfinite(probs[name]).all() or np.any((probs[name] < 0) | (probs[name] > 1)):
+                raise ValueError(f'{name}: probabilidade impossível ou não finita')
             result['curvas_calibracao'].extend(dict(modelo=name, **r) for r in curvas_calibracao(teste, probs[name], horizonte))
             result['subgrupos'].extend(dict(modelo=name, **r) for r in avaliar_subgrupos(teste, risk, probs[name], horizonte))
         else:
             grupos = teste.copy()
             grupos['faixa_idade_ingresso'] = pd.cut(grupos.idade_ingresso, [0, 30, 45, np.inf],
                 labels=['até 30', '30 a 45', 'acima de 45'], include_lowest=True)
-            for factor in ['sexo', 'plano_tipo', 'submassa', 'faixa_idade_ingresso']:
-                for val, group in grupos.groupby(factor, observed=True):
+            for factor, valores in SUBGRUPOS.items():
+                for val in valores:
+                    group = grupos.loc[grupos[factor].eq(val)]
                     ci, why = c_index(group, risk[group.index.to_numpy()])
                     result['subgrupos'].append(dict(modelo=name, fator=factor, grupo=str(val),
                         n=len(group), c_index=ci, c_index_motivo=why,
                         erro_calibracao_global=None, motivo=result.get('motivo_grade')))
         met['c_index_treino'], met['c_index_treino_motivo'] = c_index(treino, train_risk)
         result['modelos'][name] = met
+    if saida_modelos is not None and 'Random Survival Forest' in models:
+        pasta = Path(saida_modelos).parent/'rsf'
+        pasta.mkdir(parents=True, exist_ok=True)
+        rsf = models['Random Survival Forest']
+        X = teste[covs].to_numpy()
+        curva_sobrevivencia_exemplo(rsf, X, alvo(teste), str(pasta))
+        try:
+            if teste.evento.sum() < 2:
+                raise ValueError('Menos de dois eventos no teste para permutation importance')
+            importancia = importancia_variaveis(rsf, covs, X, alvo(teste), str(pasta))
+            pd.DataFrame(importancia, columns=['covariavel', 'importancia']).to_csv(
+                pasta/'importancia.csv', index=False)
+            result['diagnosticos_rsf'] = {'motivo_importancia': None}
+        except ValueError as exc:
+            result['diagnosticos_rsf'] = {'motivo_importancia': str(exc)}
+    if saida_modelos is not None:
+        estimativas = teste[['participante_id']].copy()
+        for name in riscos:
+            prefixo = 'cox' if name == 'Cox PH' else 'rsf'
+            estimativas[f'{prefixo}_risco'] = riscos[name]
+            estimativas[f'{prefixo}_prob_obito'] = probs.get(name, np.full(len(teste), np.nan))
+            estimativas[f'{prefixo}_prob_sobrevivencia'] = 1-estimativas[f'{prefixo}_prob_obito']
+        estimativas['horizonte_anos'] = horizonte
+        estimativas.to_csv(Path(saida_modelos)/'estimativas_teste.csv', index=False)
     if len(probs) == 2 and teste.evento.sum() >= 10:
         result['bootstrap'] = bootstrap_ganhos(teste, riscos, probs, horizonte, seed)
     result['veredito'] = imprimir_veredito(result['modelos'].get('Cox PH', {}),
@@ -164,34 +221,32 @@ def gerar_grafico_calibracao(rows, out):
     plt.close(fig)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    base = Path(__file__).resolve().parents[1]
-    parser.add_argument('--dataset', type=Path, default=base/'data/dataset_survival.csv')
-    parser.add_argument('--data-corte', type=date.fromisoformat, required=True)
-    parser.add_argument('--horizonte', type=float, default=5.)
-    parser.add_argument('--saida', type=Path, help='Diretório da rodada (JSON, CSV e figura)')
-    parser.add_argument('--seed', type=int, default=42)
-    args = parser.parse_args()
-    if not np.isfinite(args.horizonte) or args.horizonte <= 0:
-        parser.error('--horizonte deve ser positivo e finito')
-    out = args.saida or args.dataset.parent/'avaliacao'
+
+def gerar_resultados_comparacao(df, procedencia, dataset, data_corte, horizonte, seed, saida):
+    """Avalia e persiste ambos os modelos no mesmo holdout, sem nova CLI."""
+    out = Path(saida)
     out.mkdir(parents=True, exist_ok=True)
-    meta = args.dataset.with_suffix('.metadata.json')
-    provenance = json.loads(meta.read_text()) if meta.exists() else {'fonte': 'nao_documentada'}
-    if meta.exists() and provenance.get('dataset_sha256') != sha256(args.dataset):
-        raise ValueError('Dataset foi alterado após a extração; hash diverge do manifesto')
-    result, split = validacao_temporal(pd.read_csv(args.dataset), args.data_corte, args.horizonte, args.seed)
-    result.update(dataset_sha256=sha256(args.dataset), procedencia=provenance, ambiente=ambiente(),
+    result, split = validacao_temporal(df, data_corte, horizonte, seed, out/'modelos')
+    result.update(dataset_sha256=sha256(dataset), procedencia=procedencia, ambiente=ambiente(),
                   criterios=dict(ganho_c_index=LIMIAR_GANHO, reducao_erro_calibracao=LIMIAR_CALIBRACAO,
                                  ibs_nao_pior=True, min_eventos_teste=10, bootstrap_ic95_positivo=True))
     salvar_json(out/'resultado.json', result)
+    salvar_json(out/'dependencia_covariaveis.json', result['dependencia_covariaveis'])
+    treino, _ = dividir_temporal(df, data_corte)
+    for metodo in ['pearson', 'spearman']:
+        treino[COVARIAVEIS].corr(method=metodo).to_csv(out/f'correlacao_{metodo}.csv')
+    pd.DataFrame(result['dependencia_covariaveis']['decisoes']).to_csv(out/'decisoes_covariaveis.csv', index=False)
     split.to_csv(out/'divisao_temporal.csv', index=False)
-    pd.DataFrame(result['subgrupos']).to_csv(out/'metricas_subgrupos.csv', index=False)
-    pd.DataFrame(result['curvas_calibracao']).to_csv(out/'calibracao.csv', index=False)
+    # CSVs sem linhas mantêm cabeçalhos para os consumidores lerem uma rodada
+    # inconclusiva sem tratar arquivo vazio como falha de execução.
+    for nome, linhas, colunas in [
+        ('metricas_subgrupos.csv', result['subgrupos'],
+         ['modelo', 'fator', 'grupo', 'n', 'c_index', 'c_index_motivo', 'erro_calibracao_global', 'motivo']),
+        ('calibracao.csv', result['curvas_calibracao'],
+         ['modelo', 'grupo_risco', 'n', 'previsto', 'observado', 'erro_calibracao_global', 'motivo'])]:
+        tabela = pd.DataFrame(linhas) if linhas else pd.DataFrame(columns=colunas)
+        tabela.to_csv(out/nome, index=False)
     gerar_grafico_calibracao(result['curvas_calibracao'], out/'calibracao.png')
     print(f'Registro completo: {out / "resultado.json"}')
 
-
-if __name__ == '__main__':
-    main()
+    return result

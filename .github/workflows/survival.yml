@@ -1,0 +1,108 @@
+name: Modelo de sobrevivência
+
+on:
+  push:
+    paths:
+      - 'TRIBO3-DADOS-ESTATÍSTICA-E-IA/survival-analysis/**'
+      - 'TRIBO3-DADOS-ESTATÍSTICA-E-IA/ambiente-de-dados/**'
+      - '.github/workflows/survival.yml'
+  pull_request:
+    paths:
+      - 'TRIBO3-DADOS-ESTATÍSTICA-E-IA/survival-analysis/**'
+      - 'TRIBO3-DADOS-ESTATÍSTICA-E-IA/ambiente-de-dados/**'
+      - '.github/workflows/survival.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tribo3
+          POSTGRES_USER: tribo3
+          POSTGRES_PASSWORD: tribo3_dev
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U tribo3 -d tribo3"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      PGHOST: localhost
+      PGPORT: '5433'
+      POSTGRES_DB: tribo3
+      POSTGRES_USER: tribo3
+      POSTGRES_PASSWORD: tribo3_dev
+      DATA_REFERENCIA: '2026-10-07'
+      N_PARTICIPANTES: '3000'
+      SEED: '42'
+      PASSO2_TESTAR_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependências
+        run: |
+          python -m pip install \
+            -r TRIBO3-DADOS-ESTATÍSTICA-E-IA/survival-analysis/requirements.txt \
+            -r TRIBO3-DADOS-ESTATÍSTICA-E-IA/ambiente-de-dados/scripts/requirements.txt
+      - name: Aplicar migrations e carregar o Passo 1
+        working-directory: TRIBO3-DADOS-ESTATÍSTICA-E-IA/ambiente-de-dados
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg2
+          conn = psycopg2.connect(host=os.environ['PGHOST'], port=os.environ['PGPORT'],
+              dbname=os.environ['POSTGRES_DB'], user=os.environ['POSTGRES_USER'],
+              password=os.environ['POSTGRES_PASSWORD'])
+          conn.autocommit = True
+          migrations = Path('migrations')
+          arquivos = sorted(migrations.glob('V*__*.sql'),
+              key=lambda p: int(p.name.split('__')[0][1:]))
+          arquivos += sorted(migrations.glob('R__*.sql'))
+          with conn.cursor() as cur:
+              for arquivo in arquivos:
+                  print(f'Aplicando {arquivo.name}')
+                  cur.execute(arquivo.read_text(encoding='utf-8'))
+          conn.close()
+          PY
+          python scripts/seed.py
+      - name: Executar testes, incluindo integração com Postgres
+        working-directory: TRIBO3-DADOS-ESTATÍSTICA-E-IA/survival-analysis
+        run: python -m unittest discover -s tests -v
+      - name: Gerar resultados para revisão e consumo
+        working-directory: TRIBO3-DADOS-ESTATÍSTICA-E-IA/survival-analysis
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          resultado = subprocess.run([sys.executable, 'main.py',
+              '--data-referencia', os.environ['DATA_REFERENCIA'],
+              '--identificacao-fonte', 'CI;Passo1;seed=42;n=3000',
+              '--data-corte', '2016-01-01', '--horizonte', '5'])
+          if resultado.returncode not in (0, 2):
+              raise SystemExit(resultado.returncode)
+          fechamento = json.loads(Path('data/resultado/fechamento.json').read_text())
+          assert fechamento['status_execucao'] == 'concluida'
+          assert all(e['status'] == 'concluida' for e in fechamento['etapas'])
+          assert all(c['status'] in ('executado', 'gerados_na_rodada')
+              for c in fechamento['criterios_issue34']), 'Critério sem suporte no lote do CI'
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: survival-${{ github.sha }}
+          path: TRIBO3-DADOS-ESTATÍSTICA-E-IA/survival-analysis/data/resultado/
+          if-no-files-found: error
+          retention-days: 30

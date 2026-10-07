@@ -1,5 +1,4 @@
 """KM descritivo por sexo, BD/CD/CV e submassa; log-rank global por fator."""
-import argparse
 from pathlib import Path
 
 import matplotlib
@@ -11,7 +10,15 @@ from lifelines import KaplanMeierFitter
 from lifelines.statistics import multivariate_logrank_test
 
 GRUPOS = {'sexo': ['M', 'F'], 'plano_tipo': ['BD', 'CD', 'CV'],
-          'submassa': ['Plano A', 'Plano B', 'Plano C']}
+          'submassa': ['Plano A', 'Plano B', 'Plano C'],
+          'faixa_idade_ingresso': ['até 30', '30 a 45', 'acima de 45']}
+
+
+def incluir_faixas(df):
+    df = df.copy()
+    df['faixa_idade_ingresso'] = pd.cut(df.idade_ingresso, [0, 30, 45, np.inf],
+        labels=GRUPOS['faixa_idade_ingresso'], include_lowest=True)
+    return df
 
 
 def ajustar_km_global(df):
@@ -19,6 +26,7 @@ def ajustar_km_global(df):
 
 
 def resumo_grupos(df):
+    df = incluir_faixas(df)
     rows, testes = [], []
     for fator, valores in GRUPOS.items():
         for valor in valores:
@@ -39,20 +47,17 @@ def resumo_grupos(df):
     return rows, testes
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--dataset', type=Path, default=Path(__file__).resolve().parents[1]/'data/dataset_survival.csv')
-    parser.add_argument('--saida', type=Path)
-    args = parser.parse_args()
-    df = pd.read_csv(args.dataset)
+
+def gerar_resultados_km(df, saida):
+    df = incluir_faixas(df)
     if df.empty:
         raise ValueError('Dataset vazio')
-    out = args.saida or args.dataset.parent/'graficos'
+    out = Path(saida)
     out.mkdir(parents=True, exist_ok=True)
     rows, testes = resumo_grupos(df)
     for fator in ['global', *GRUPOS]:
         fig, ax = plt.subplots(figsize=(8, 5))
-        groups = [('Global', df)] if fator == 'global' else list(df.groupby(fator))
+        groups = [('Global', df)] if fator == 'global' else list(df.groupby(fator, observed=True))
         for value, group in groups:
             km = KaplanMeierFitter().fit(group.tempo_observado, group.evento,
                   label=f'{value} (n={len(group)}, óbitos={group.evento.sum()})')
@@ -75,6 +80,4 @@ def main():
     print(pd.DataFrame(testes).to_string(index=False))
     print('KM/log-rank são descritivos; não substituem calibração/discriminação do Cox por grupo.')
 
-
-if __name__ == '__main__':
-    main()
+    return met

@@ -1,118 +1,100 @@
-# Model Card — Modelo Individual de Sobrevivência
+# Model card — Sobrevivência individual
 
-## Propósito e estado da entrega
+Versão dos modelos: 0.2.1. Versão das saídas: 0.2.1.
+Responsáveis: Caio Brandão Santos e Pedro Lucas Figueiredo Santana.
+[SL-02 / issue #34](https://github.com/FCTE-UnB-EPS6/estudos-populacionais/issues/34).
 
-Estimar sobrevivência até óbito desde o ingresso no plano, como insumo analítico
-para risco coletivo. O MVP não estima transições para invalidez, aposentadoria ou
-desligamento. **Nunca usar para decisão automática sobre direitos individuais.**
+## Propósito e dados
 
-Implementação revisada; integração e avaliação sobre a rodada oficial do Postgres
-**pendentes**. Cox permanece como baseline por simplicidade, sem superioridade
-preditiva declarada. Os números antigos correspondem a experimentos reproduzidos
-com o gerador local e não validam o modelo na massa oficial.
+Estimar sobrevivência desde o ingresso até óbito para análises de risco
+coletivo, a partir dos participantes sintéticos curados pelo Passo 1.
+`main.py` lê `participante`, `evento` e `exposicao` no Postgres em
+uma transação somente leitura, sem CPF e sem modificar a fonte.
 
-## Dados
+Óbito válido dentro do acompanhamento é evento. Desligamento anterior censura;
+aposentadoria e invalidez não encerram automaticamente o acompanhamento.
+Inconsistências são excluídas com motivo, sem imputar óbitos ou durações.
+Ausência ou valor inválido de exposição oficial também exclui o registro;
+o motivo permanece na auditoria e não é preenchido a partir de datas.
+Datas, IDs e exposição oficial são usados para rastreabilidade e auditoria.
 
-População-alvo do experimento: participantes sintéticos das tabelas curadas do
-Passo 1. Extração atual por ID, eventos agregados e exposição agregada para auditoria.
-A identificação de lote/versão é declarada pelo operador; o hash da extração
-identifica seu conteúdo e não comprova, sozinho, qual comando gerou o banco.
+**A estimativa individual é insumo para gestão de risco coletivo, nunca decisão automática sobre direitos individuais.**
 
-| Campo | Uso |
-|---|---|
-| participante_id, data_ingresso, data_fim, data_referencia | Rastreabilidade e corte; não entram como preditores |
-| tempo_observado, evento | Duração em anos e indicador de óbito dentro da janela |
-| idade_ingresso | Idade calculada na data de ingresso |
-| sexo, plano_tipo, submassa | Categorias preservadas para validação por grupo |
-| sexo_M, plano_BD, plano_CD, submassa_A, submassa_B | Codificação de covariáveis; F, CV e Plano C são referências |
-| exposicao_oficial_anos, diferenca_exposicao_anos | Diagnóstico de coerência, não preditores |
+## Métodos
 
-Datas ausentes/inválidas, ingresso sem acompanhamento, óbito sem data,
-nascimento após ingresso e duração não positiva são excluídos com motivos.
-IDs duplicados interrompem a construção. Não se inventa um óbito na referência
-nem se substitui tempo negativo por 0,01 ano. Óbitos futuros não são eventos na
-janela. Óbito e saída empatados contam como óbito; saída anterior censura.
-Aposentadoria e invalidez não encerram exposição ao risco de morte.
+KM é o baseline descritivo por sexo, idade ao ingresso, plano e submassa.
+Cox PH usa penalização ridge 0,01. RSF usa 100 árvores, split mínimo 10,
+folha mínima 5, max_features sqrt e seed 42.
 
-## Modelos e seleção de covariáveis
+Covariáveis: idade_ingresso, sexo_M, plano_BD, plano_CD, submassa_A e submassa_B.
+Referências: F, CV e Plano C. Apenas constantes no treino são removidas.
+Pearson, Spearman e Cramér V são calculados no treino; inclusão, remoção e
+justificativas são registradas por covariável. Correlação não prova
+independência; não se usa seleção automática baseada no holdout nem cópula.
 
-- Cox PH com penalizador ridge 0,01; HR e Schoenfeld no treino.
-- RSF com 100 árvores, `min_samples_split=10`, `min_samples_leaf=5`,
-  `max_features=sqrt`, seed registrada.
-- Lista de covariáveis definida pelo domínio; Pearson/Spearman são diagnósticos
-  documentados, não um seletor automático. Constantes são removidas apenas com
-  base no treino e a mesma lista é aplicada aos dois modelos. Pares com |r|>0,7
-  ficam no registro para inspeção antes da conclusão científica.
+Treino: ingressos anteriores ao corte, com desfechos censurados no corte.
+Teste: ingressos a partir do corte. O cadastro é um snapshot atual; não se
+reconstrói o conhecimento bitemporal que existia no passado.
 
-O teste de Schoenfeld pode não detectar violação com poucos eventos; ausência de
-significância não confirma a hipótese PH.
+Discriminação: C-index. Calibração: média prevista versus 1−KM, com IC95%.
+Brier e IBS usam IPCW do treino dentro do suporte comum.
+Subgrupos: sexo, plano, submassa e faixas fixas de idade. Falta de suporte
+gera valor ausente e motivo, nunca uma métrica inventada.
 
-## Validação e métricas
+A comparação preserva Cox se não houver ganho conjunto: C-index >0,02,
+redução de erro de calibração >0,005, IBS não pior, pelo menos 10 eventos
+no teste e IC95% positivos no bootstrap pareado. Não demonstra ganho externo.
 
-Um corte de calendário explícito separa ingressos antigos e novos. O treino
-limita desfechos ao corte; o teste usa o acompanhamento até a referência.
-O snapshot cadastral é atual: não há reconstrução completa dos registros segundo
-`data_conhecimento`, nem garantia de que plano/submassa eram iguais no ingresso.
-Essa limitação impede apresentar a avaliação como um backtest prospectivo integral.
+## Resultados e limites
 
-| Métrica | Interpretação |
-|---|---|
-| C-index de teste | Discriminação fora do treino; maior risco previsto = maior escore |
-| C-index de treino | Diagnóstico de ajuste/otimismo, não evidência de generalização |
-| Brier no horizonte e IBS | Erro probabilístico com censura (IPCW), combina calibração e discriminação |
-| Erro de calibração global | Absoluto entre média prevista de óbito e 1−KM no horizonte; menor é melhor |
-| Curva de calibração por tercis | Previsto versus observado por KM com IC95%; complemento ao erro global |
-| AIC parcial | Ajuste do Cox, não calibração nem comparação direta com RSF |
-| Log-rank global | Comparação descritiva das curvas KM por fator, não validação do Cox |
+Rodada no Postgres local do autor em 07/10/2026: geração com 3.000
+participantes, seed 42, referência 2026-10-07, corte 2016-01-01 e horizonte
+5 anos. Foram extraídos 2.960 registros; 23 excluídos (0,78%) e 2.937 usados,
+com 140 óbitos. Treino temporal: 1.916 participantes/40 óbitos até o corte;
+teste: 1.021 participantes/20 óbitos, sendo 14 até cinco anos.
 
-Horizonte padrão: 5 anos, substituível antes da rodada. Grade IBS: 30 pontos de
-`max(0,01, menor tempo do teste)` até o horizonte, idêntica nos dois modelos e
-registrada. Fora do suporte de treino/teste ou com pesos IPCW inválidos, Brier/IBS
-ficam indisponíveis com motivo. Tempos de teste além de `tau` são censurados
-administrativamente para a chamada Brier; `tau` é estritamente posterior ao
-horizonte, preservando os desfechos de interesse. C-index usa o teste completo.
+| Métrica no teste | Cox PH | Random Survival Forest |
+|---|---:|---:|
+| C-index | 0,62320 | 0,47862 |
+| Brier em 5 anos | 0,01571 | 0,01621 |
+| IBS | 0,00945 | 0,00965 |
+| Erro absoluto de calibração global | 0,00643 | 0,00706 |
 
-Calibração KM requer pelo menos 20 pessoas, 2 óbitos até o horizonte e 5 pessoas
-acompanhadas até ele; C-index exploratório requer 2 eventos e pares comparáveis.
-São limites operacionais mínimos, não garantias de precisão estatística. Grupos
-sem suporte são registrados, não omitidos da tabela. Os tercis são definidos pelas
-previsões somente para diagnóstico, sem reajustar modelos ou selecionar hiperparâmetros.
+Cox foi mantido: RSF não atende aos critérios de ganho conjunto. C-index
+de treino/teste do RSF: 0,96560/0,47862, compatível com sobreajuste.
+Probabilidade média de óbito em cinco anos no Cox: 1,196%; observada por
+KM: 1,839% (IC95% 1,071%–3,147%). O erro de 0,643 ponto percentual não
+constitui, sozinho, uma aprovação de calibração individual.
 
-Validação por sexo, BD/CD/CV, Plano A/B/C e idade ao ingresso (até 30, >30 até 45,
->45): C-index e calibração direta no teste. KM e log-rank descritivos por sexo,
-plano e submassa são entregues separadamente.
+As 22 avaliações por subgrupo produziram as métricas exigidas, dentro dos
+mínimos operacionais do código; esses mínimos não garantem alta precisão.
+Schoenfeld no treino não detectou violação a 5% (menor p: 0,056).
+KM e Cox descritivo recuperaram as direções pontuais de idade/sexo.
+HR por ano de idade ao ingresso: 1,0631 (IC95% 1,0472–1,0792);
+HR M/F: 1,5343 (IC95% 1,1295–2,0841).
 
-## Critério de comparação
+Os motivos das 23 exclusões foram conferidos e mantidos: 17 registros com
+saída anterior ao ingresso/duração não positiva, cinco sem exposição oficial
+e um óbito sem data. Quatro dos 17 também têm óbito anterior ao ingresso.
+Nenhuma exposição ausente ou divergência acima de 0,03 ano na base usada.
+Os hashes e a revisão estão no experiment record; as saídas completas ficam
+em `data/resultado/`. Os números são da execução real informada pelo autor,
+não de fixtures.
 
-Parâmetros definidos antes de analisar a rodada oficial:
+`padrao_mortalidade.json` compara sexo e idade por KM e HR Cox descritivo.
+Direção pontual e IC95% são distintos. Idade ao ingresso não é idade atingida;
+a checagem não recupera qx exato nem valida uma população real.
+Poucos eventos, grupos raros, composição da massa e hipóteses PH/censura
+independente limitam a interpretação.
 
-- Ganho de C-index do RSF estritamente maior que 0,02.
-- Redução do erro de calibração global estritamente maior que 0,005 (0,5 ponto percentual).
-- IBS do RSF não superior ao do Cox.
-- Pelo menos 10 eventos no teste e métricas disponíveis para ambos.
-- IC95% percentil dos dois ganhos com limite inferior positivo: bootstrap pareado
-  do teste, 200 amostras, ao menos 80% válidas, mesma seed registrada.
+A CLI aceita apenas extração do Postgres ou snapshot rastreado dessa extração.
+A fixture local fica restrita aos testes. O hash identifica o conteúdo e a
+versão do código; a identificação da carga é declarada pelo operador.
 
-Esses limiares são convenções do experimento, não padrões atuariais. O bootstrap
-é condicional aos modelos ajustados: não cobre incerteza de treino, múltiplas
-rodadas ou generalização externa. Um resultado aprovado demonstra ganho apenas
-nesse holdout. Ausência de métricas ou suporte gera **inconclusivo**; Cox é mantido
-por simplicidade. Ganho pontual de C-index sozinho não promove o challenger.
+## Entrega
 
-## Limitações e rastreabilidade
-
-Dados sintéticos não demonstram validade em pessoas reais. Poucos óbitos limitam
-precisão, estabilidade dos coeficientes e testes por subgrupo. Censura independente
-é uma hipótese necessária; 97% censurados não significa 97% sobreviventes em um
-horizonte definido. Calibração global pode ocultar erros opostos entre indivíduos;
-curvas e avaliações por grupo precisam ser lidas junto da métrica.
-
-Versão do código, hashes dos scripts/dataset, bibliotecas, referência, exclusões,
-divisão, hiperparâmetros, métricas e motivos ficam nos manifestos e no
-[experiment record](experiment_record.md). Autores: Caio Brandão Santos e Pedro
-Lucas Figueiredo Santana.
-
-## Referências técnicas
-
-- [C-index e direção do risco — scikit-survival](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.metrics.concordance_index_censored.html).
-- [Brier e pesos IPCW — scikit-survival](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.metrics.brier_score.html).
+Os bundles temporais Cox/RSF, atributos em ordem, dados, divisão temporal,
+estimativas, métricas, cards e manifesto são produzidos pelo mesmo comando.
+A leitura dos bundles e a reprodução das previsões são verificadas nos testes.
+O [README](../README.md) explica os arquivos e o consumo pelos Passos 7/8.
+Execução completa não equivale a aprovação científica ou parecer de gate T6.

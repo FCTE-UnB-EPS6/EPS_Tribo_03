@@ -1,9 +1,8 @@
 """Dataset de óbito: tabelas finais do Passo 1; gerador local só para testes.
 
-Uso oficial: --fonte banco --data-referencia AAAA-MM-DD --identificacao-fonte LOTE
+Execução oficial pela raiz main.py; este módulo não possui CLI.
 Nenhuma falha de conexão aciona geração local. Não modifica o banco.
 """
-import argparse
 from datetime import date, datetime, timedelta, timezone
 import os
 from pathlib import Path
@@ -11,7 +10,7 @@ import random
 import sys
 
 import pandas as pd
-from registro import ambiente, salvar_json, sha256
+from .registro import ambiente, salvar_json, sha256
 
 
 def extrair_do_banco():
@@ -49,7 +48,7 @@ def extrair_do_banco():
     ORDER BY p.participante_id
     """
     try:
-        conn.set_session(readonly=True)
+        conn.set_session(readonly=True, isolation_level='REPEATABLE READ')
         with conn.cursor() as cur:
             cur.execute(query)
             return pd.DataFrame(cur.fetchall(), columns=[c.name for c in cur.description])
@@ -133,7 +132,13 @@ def construir_dataset_analitico(df, data_referencia=None, retornar_exclusoes=Fal
     # A exposição oficial usa dias inclusivos e teto anual 1.0: não é idêntica
     # à duração contínua. Guardamos a diferença para inspeção, sem alterar tempos.
     if 'exposicao_oficial_anos' in df:
-        df['exposicao_oficial_anos'] = pd.to_numeric(df.exposicao_oficial_anos)
+        original = df.exposicao_oficial_anos
+        df['exposicao_oficial_anos'] = pd.to_numeric(original, errors='coerce')
+        marcar(original.isna(), 'exposicao_oficial_ausente')
+        marcar((original.notna() & df.exposicao_oficial_anos.isna()) |
+               df.exposicao_oficial_anos.le(0) |
+               df.exposicao_oficial_anos.isin([float('inf'), float('-inf')]),
+               'exposicao_oficial_invalida')
         df['diferenca_exposicao_anos'] = df.exposicao_oficial_anos - df.tempo_observado
     exclusoes = pd.DataFrame({'participante_id': df.participante_id,
                               'motivos': [';'.join(m) for m in motivos]})
@@ -147,46 +152,37 @@ def construir_dataset_analitico(df, data_referencia=None, retornar_exclusoes=Fal
     return resultado
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--fonte', choices=['banco', 'local'], default='banco')
-    parser.add_argument('--data-referencia', type=date.fromisoformat, required=True)
-    parser.add_argument('--identificacao-fonte', help='Lote/versão do Passo 1; descrição declarada pelo operador')
-    parser.add_argument('--n-participantes', type=int, default=300)
-    parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--saida', type=Path)
-    args = parser.parse_args()
-    if args.fonte == 'banco' and not args.identificacao_fonte:
-        parser.error('--identificacao-fonte é obrigatório para registrar a extração oficial')
-    raw = (extrair_do_banco() if args.fonte == 'banco' else
-           gerar_dados_locais(args.n_participantes, args.seed, args.data_referencia))
-    df, excl = construir_dataset_analitico(raw, args.data_referencia, retornar_exclusoes=True)
-    base = Path(__file__).resolve().parents[1] / 'data'
-    out = args.saida or base / ('dataset_survival.csv' if args.fonte == 'banco' else 'local/dataset_survival.csv')
+
+def extrair_e_salvar_dataset(data_referencia, identificacao_fonte, saida):
+    """Extrai somente Postgres, audita exclusões e grava um snapshot rastreado."""
+    if not identificacao_fonte or not identificacao_fonte.strip():
+        raise ValueError('Identificação do lote do Passo 1 é obrigatória')
+    raw = extrair_do_banco()
+    df, excl = construir_dataset_analitico(raw, data_referencia, retornar_exclusoes=True)
+    out = Path(saida)
     out.parent.mkdir(parents=True, exist_ok=True)
     raw.to_csv(out.with_suffix('.bruto.csv'), index=False)
     excl.to_csv(out.with_suffix('.exclusoes.csv'), index=False)
-    df['fonte_dados'] = args.fonte
+    df['fonte_dados'] = 'banco'
     df.to_csv(out, index=False)
-    meta = dict(fonte=args.fonte, identificacao_fonte=args.identificacao_fonte,
-                identificacao_declarada=True, data_referencia=str(args.data_referencia),
+    meta = dict(fonte='banco', identificacao_fonte=identificacao_fonte,
+                identificacao_declarada=True, data_referencia=str(data_referencia),
                 extraido_em=datetime.now(timezone.utc).isoformat(),
                 comando=sys.argv, n_bruto=len(raw), n_analitico=len(df),
                 n_excluidos=len(excl), n_obitos=int(df.evento.sum()),
                 dataset_sha256=sha256(out), bruto_sha256=sha256(out.with_suffix('.bruto.csv')),
+                exclusoes_sha256=sha256(out.with_suffix('.exclusoes.csv')),
                 ambiente=ambiente())
-    if args.fonte == 'local':
-        meta.update(seed=args.seed, n_solicitado=args.n_participantes,
-                    aviso='Fixture independente; não é a massa oficial do Passo 1')
     if 'diferenca_exposicao_anos' in df:
         meta['exposicao'] = dict(n_sem_exposicao=int(df.exposicao_oficial_anos.isna().sum()),
+            n_sem_exposicao_bruto=int(raw.exposicao_oficial_anos.isna().sum()),
             n_diferencas_acima_003_anos=int(df.diferenca_exposicao_anos.abs().gt(.03).sum()),
             aviso='Diagnóstico; diferenças podem refletir curadoria, dias inclusivos ou referência distinta')
+        if 'exposicao_data_fim' in df:
+            ultima = pd.to_datetime(df.exposicao_data_fim, errors='coerce').max()
+            meta['exposicao']['ultima_data_no_banco'] = None if pd.isna(ultima) else ultima.date().isoformat()
     salvar_json(out.with_suffix('.metadata.json'), meta)
-    print(f'{out}: fonte={args.fonte}; n={len(df)}; óbitos={df.evento.sum()}; exclusões={len(excl)}')
+    print(f'{out}: fonte=banco; n={len(df)}; óbitos={df.evento.sum()}; exclusões={len(excl)}')
     if df.empty:
-        raise SystemExit('Nenhuma linha válida; ver exclusões. Modelos não devem ser executados.')
-
-
-if __name__ == '__main__':
-    main()
+        raise ValueError('Nenhuma linha válida; ver exclusões. Modelos não devem ser executados.')
+    return out

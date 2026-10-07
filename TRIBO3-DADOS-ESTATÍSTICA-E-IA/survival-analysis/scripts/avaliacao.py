@@ -6,6 +6,9 @@ from sksurv.metrics import brier_score, concordance_index_censored, integrated_b
 from sksurv.nonparametric import CensoringDistributionEstimator
 
 COVARIAVEIS = ['idade_ingresso', 'sexo_M', 'plano_BD', 'plano_CD', 'submassa_A', 'submassa_B']
+SUBGRUPOS = {'sexo': ['F', 'M'], 'plano_tipo': ['BD', 'CD', 'CV'],
+             'submassa': ['Plano A', 'Plano B', 'Plano C'],
+             'faixa_idade_ingresso': ['até 30', '30 a 45', 'acima de 45']}
 
 
 def dividir_temporal(df, data_corte):
@@ -136,8 +139,9 @@ def avaliar_subgrupos(teste, risco, prob, horizonte):
     frame['faixa_idade_ingresso'] = pd.cut(frame.idade_ingresso, [0, 30, 45, np.inf],
         labels=['até 30', '30 a 45', 'acima de 45'], include_lowest=True)
     rows = []
-    for col in ['sexo', 'plano_tipo', 'submassa', 'faixa_idade_ingresso']:
-        for val, grupo in frame.groupby(col, observed=True):
+    for col, valores in SUBGRUPOS.items():
+        for val in valores:
+            grupo = frame.loc[frame[col].eq(val)]
             pos = frame.index.get_indexer(grupo.index)
             c, motivo = c_index(grupo, risco[pos])
             rows.append(dict(fator=col, grupo=str(val), c_index=c, c_index_motivo=motivo,
